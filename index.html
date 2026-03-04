@@ -101,32 +101,60 @@
       </div>
       <div id="apiKeyForm" class="card-content">
         <p class="api-note">
-          支持任何 <strong>OpenAI 兼容</strong> 的 API（OpenAI、DeepSeek、Qwen、Ollama 等）。
-          配置仅存储在您的本地浏览器中，不会上传至任何服务器。
+          选择协议后填写对应参数，配置仅存储在本地浏览器，不会上传至任何服务器。
+        </p>
+
+        <!-- Protocol selector tabs -->
+        <div class="protocol-tabs" role="radiogroup" aria-label="API 协议">
+          <label class="protocol-tab">
+            <input type="radio" name="protocol" value="openai"
+              checked onchange="onProtocolChange()">
+            <span>OpenAI 兼容</span>
+          </label>
+          <label class="protocol-tab">
+            <input type="radio" name="protocol" value="anthropic"
+              onchange="onProtocolChange()">
+            <span>Anthropic</span>
+          </label>
+        </div>
+
+        <!-- Protocol-specific description -->
+        <p id="protocolNote" class="protocol-note">
+          支持 OpenAI、DeepSeek、通义千问、Ollama 等任意兼容接口。
         </p>
 
         <!-- Quick presets -->
         <div class="preset-row">
           <span class="preset-label">快速填入：</span>
-          <button class="preset-btn" onclick="applyPreset('openai')">OpenAI</button>
-          <button class="preset-btn" onclick="applyPreset('deepseek')">DeepSeek</button>
-          <button class="preset-btn" onclick="applyPreset('qwen')">通义千问</button>
-          <button class="preset-btn" onclick="applyPreset('ollama')">Ollama</button>
+          <span id="presetsOpenai">
+            <button class="preset-btn" onclick="applyPreset('openai')">OpenAI</button>
+            <button class="preset-btn" onclick="applyPreset('deepseek')">DeepSeek</button>
+            <button class="preset-btn" onclick="applyPreset('qwen')">通义千问</button>
+            <button class="preset-btn" onclick="applyPreset('ollama')">Ollama</button>
+          </span>
+          <span id="presetsAnthropic" style="display:none;">
+            <button class="preset-btn" onclick="applyPreset('claude3-opus')">claude-opus-4-6</button>
+            <button class="preset-btn" onclick="applyPreset('claude3-sonnet')">claude-sonnet-4-6</button>
+            <button class="preset-btn" onclick="applyPreset('claude3-haiku')">claude-haiku-4-5</button>
+          </span>
         </div>
 
         <div class="config-fields">
-          <div class="field-group">
+          <!-- Base URL: shown only for OpenAI-compat -->
+          <div class="field-group" id="baseUrlGroup">
             <label class="field-label" for="baseUrlInput">Base URL</label>
             <input type="url" id="baseUrlInput"
               placeholder="https://api.openai.com/v1"
               class="api-input" autocomplete="off">
           </div>
+
           <div class="field-group">
             <label class="field-label" for="modelInput">模型名称</label>
             <input type="text" id="modelInput"
               placeholder="gpt-4o-mini"
               class="api-input" autocomplete="off">
           </div>
+
           <div class="field-group">
             <label class="field-label" for="apiKeyInput">API Key</label>
             <div class="input-group">

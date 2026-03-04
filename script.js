@@ -281,28 +281,171 @@ function showStatus(elementId, type, message) {
   }
 }
 
+// ============ Protocol Adapters ============
+
+/**
+ * Each adapter handles one LLM API protocol.
+ *
+ * Interface:
+ *   buildRequest(cfg, systemPrompt, userPrompt)
+ *     → { url: string, options: RequestInit }
+ *
+ *   extractChunk(parsedJson)
+ *     → string   (the incremental text from one SSE data line)
+ */
+const PROTOCOL_ADAPTERS = {
+
+  /**
+   * OpenAI-compatible protocol.
+   * Works with OpenAI, DeepSeek, 通义千问, Ollama, and any
+   * service that follows the /chat/completions SSE spec.
+   *
+   * Request:  POST <baseUrl>/chat/completions
+   * Auth:     Authorization: Bearer <apiKey>
+   * Body:     { model, messages:[{role,content}], stream, max_tokens }
+   * SSE:      data: { choices:[{ delta:{ content:"..." } }] }
+   *           data: [DONE]
+   */
+  openai: {
+    buildRequest({ baseUrl, model, apiKey }, systemPrompt, userPrompt) {
+      const url = baseUrl.replace(/\/$/, '') + '/chat/completions';
+      return {
+        url,
+        options: {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type':  'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 1024,
+            stream:     true,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user',   content: userPrompt   },
+            ],
+          }),
+        },
+      };
+    },
+
+    extractChunk(json) {
+      return json.choices?.[0]?.delta?.content ?? '';
+    },
+  },
+
+  /**
+   * Anthropic Messages API protocol.
+   * Endpoint is fixed; no Base URL is needed from the user.
+   *
+   * Request:  POST https://api.anthropic.com/v1/messages
+   * Auth:     x-api-key: <apiKey>
+   *           anthropic-version: 2023-06-01
+   *           anthropic-dangerous-direct-browser-access: true  (required for browser calls)
+   * Body:     { model, system, messages:[{role:"user",content}], stream, max_tokens }
+   * SSE:      event: content_block_delta
+   *           data: { type:"content_block_delta", delta:{ text:"..." } }
+   *           event: message_stop
+   */
+  anthropic: {
+    buildRequest({ model, apiKey }, systemPrompt, userPrompt) {
+      return {
+        url: 'https://api.anthropic.com/v1/messages',
+        options: {
+          method: 'POST',
+          headers: {
+            'x-api-key':                              apiKey,
+            'anthropic-version':                      '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+            'Content-Type':                           'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 1024,
+            stream:     true,
+            system:     systemPrompt,
+            messages:   [{ role: 'user', content: userPrompt }],
+          }),
+        },
+      };
+    },
+
+    extractChunk(json) {
+      // Anthropic emits content_block_delta events; other event types carry no text
+      if (json.type === 'content_block_delta') {
+        return json.delta?.text ?? '';
+      }
+      return '';
+    },
+  },
+};
+
 // ============ API / Model Configuration ============
 
 /**
- * Preset configurations for common OpenAI-compatible providers.
- * Each entry provides the base URL and default model name.
+ * Preset configurations.
+ * Each entry specifies which protocol to use, an optional base URL,
+ * and a sensible default model name.
  */
 const PRESETS = {
-  openai:   { url: 'https://api.openai.com/v1',               model: 'gpt-4o-mini' },
-  deepseek: { url: 'https://api.deepseek.com/v1',             model: 'deepseek-chat' },
-  qwen:     { url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-turbo' },
-  ollama:   { url: 'http://localhost:11434/v1',               model: 'llama3' },
+  // ── OpenAI-compatible ──────────────────────────────────
+  openai:        { protocol: 'openai',    url: 'https://api.openai.com/v1',                          model: 'gpt-4o-mini'           },
+  deepseek:      { protocol: 'openai',    url: 'https://api.deepseek.com/v1',                        model: 'deepseek-chat'         },
+  qwen:          { protocol: 'openai',    url: 'https://dashscope.aliyuncs.com/compatible-mode/v1',  model: 'qwen-turbo'            },
+  ollama:        { protocol: 'openai',    url: 'http://localhost:11434/v1',                          model: 'llama3'                },
+  // ── Anthropic ─────────────────────────────────────────
+  'claude3-opus':   { protocol: 'anthropic', url: '', model: 'claude-opus-4-6'          },
+  'claude3-sonnet': { protocol: 'anthropic', url: '', model: 'claude-sonnet-4-6'        },
+  'claude3-haiku':  { protocol: 'anthropic', url: '', model: 'claude-haiku-4-5-20251001'},
 };
 
 /**
- * Fills in the Base URL and Model fields from a preset provider.
- * @param {string} name - Preset key (openai | deepseek | qwen | ollama)
+ * Applies a preset: sets the protocol radio, fills Base URL and model,
+ * then refreshes the protocol-specific UI.
+ * @param {string} name - Key in PRESETS
  */
 function applyPreset(name) {
   const preset = PRESETS[name];
   if (!preset) return;
-  document.getElementById('baseUrlInput').value = preset.url;
-  document.getElementById('modelInput').value   = preset.model;
+
+  const radio = document.querySelector(`input[name="protocol"][value="${preset.protocol}"]`);
+  if (radio) { radio.checked = true; }
+
+  if (preset.url) document.getElementById('baseUrlInput').value = preset.url;
+  document.getElementById('modelInput').value = preset.model;
+
+  applyProtocolUI(preset.protocol);
+}
+
+/**
+ * Called when the protocol radio changes.
+ * Updates visible fields and hint text to match the selected protocol.
+ */
+function onProtocolChange() {
+  const protocol = document.querySelector('input[name="protocol"]:checked')?.value ?? 'openai';
+  applyProtocolUI(protocol);
+}
+
+/**
+ * Shows/hides form elements that differ between protocols.
+ * @param {'openai'|'anthropic'} protocol
+ */
+function applyProtocolUI(protocol) {
+  const isAnthropic = protocol === 'anthropic';
+
+  // Base URL field is not needed for Anthropic (fixed endpoint)
+  document.getElementById('baseUrlGroup').style.display     = isAnthropic ? 'none' : '';
+  document.getElementById('presetsOpenai').style.display    = isAnthropic ? 'none' : '';
+  document.getElementById('presetsAnthropic').style.display = isAnthropic ? ''     : 'none';
+
+  document.getElementById('protocolNote').textContent = isAnthropic
+    ? 'Anthropic 官方 API，无需填写 Base URL（端点固定）。需要 Anthropic Console 颁发的 API Key。'
+    : '支持 OpenAI、DeepSeek、通义千问、Ollama 等任意兼容 /chat/completions 接口。';
+
+  document.getElementById('apiKeyInput').placeholder = isAnthropic
+    ? 'sk-ant-...'
+    : 'sk-...';
 }
 
 /** Collapses or expands the API config form. */
@@ -318,24 +461,28 @@ function toggleApiKeyVisibility() {
 }
 
 /**
- * Saves Base URL, model name, and API key to localStorage,
- * then collapses the config card and updates the status badge.
+ * Validates, saves all config fields to localStorage, then collapses the card.
  */
 function saveApiKey() {
-  const baseUrl = document.getElementById('baseUrlInput').value.trim();
-  const model   = document.getElementById('modelInput').value.trim();
-  const apiKey  = document.getElementById('apiKeyInput').value.trim();
+  const protocol = document.querySelector('input[name="protocol"]:checked')?.value ?? 'openai';
+  const baseUrl  = document.getElementById('baseUrlInput').value.trim();
+  const model    = document.getElementById('modelInput').value.trim();
+  const apiKey   = document.getElementById('apiKeyInput').value.trim();
 
-  if (!baseUrl) { showStatus('apiStatus', 'error', '请输入 Base URL'); return; }
-  if (!model)   { showStatus('apiStatus', 'error', '请输入模型名称'); return; }
-  if (!apiKey)  { showStatus('apiStatus', 'error', '请输入 API Key'); return; }
+  if (protocol === 'openai' && !baseUrl) {
+    showStatus('apiStatus', 'error', '请输入 Base URL'); return;
+  }
+  if (!model)  { showStatus('apiStatus', 'error', '请输入模型名称'); return; }
+  if (!apiKey) { showStatus('apiStatus', 'error', '请输入 API Key'); return; }
 
+  localStorage.setItem('iching_protocol', protocol);
   localStorage.setItem('iching_base_url', baseUrl);
   localStorage.setItem('iching_model',    model);
   localStorage.setItem('iching_api_key',  apiKey);
 
-  showStatus('apiStatus', 'success', `✓ 已保存：${model} @ ${baseUrl}`);
-  updateConfigBadge(model);
+  const protocolLabel = protocol === 'anthropic' ? 'Anthropic' : 'OpenAI 兼容';
+  showStatus('apiStatus', 'success', `✓ 已保存：${protocolLabel} · ${model}`);
+  updateConfigBadge(protocol, model);
 
   setTimeout(() => {
     document.getElementById('apiKeyCard').classList.add('collapsed');
@@ -344,14 +491,16 @@ function saveApiKey() {
 }
 
 /**
- * Updates the small badge in the API card header.
- * @param {string|null} model - Model name, or null if not configured
+ * Updates the badge in the config card header.
+ * @param {string} protocol
+ * @param {string|null} model
  */
-function updateConfigBadge(model) {
+function updateConfigBadge(protocol, model) {
   const badge = document.getElementById('apiConfigStatus');
   if (!badge) return;
   if (model) {
-    badge.textContent = model;
+    const label = protocol === 'anthropic' ? 'Anthropic' : 'OpenAI';
+    badge.textContent = `${label} · ${model}`;
     badge.classList.add('ok');
   } else {
     badge.textContent = '未配置';
@@ -360,22 +509,31 @@ function updateConfigBadge(model) {
 }
 
 /**
- * Loads saved configuration from localStorage and pre-fills the form.
- * Collapses the card only if all three fields are present.
+ * Restores all saved config from localStorage into the form fields.
+ * Collapses the card if the minimum required fields are present.
  */
 function loadApiKeyIfExists() {
-  const baseUrl = localStorage.getItem('iching_base_url');
-  const model   = localStorage.getItem('iching_model');
-  const apiKey  = localStorage.getItem('iching_api_key');
+  const protocol = localStorage.getItem('iching_protocol') || 'openai';
+  const baseUrl  = localStorage.getItem('iching_base_url') || '';
+  const model    = localStorage.getItem('iching_model')    || '';
+  const apiKey   = localStorage.getItem('iching_api_key')  || '';
+
+  // Restore protocol radio
+  const radio = document.querySelector(`input[name="protocol"][value="${protocol}"]`);
+  if (radio) radio.checked = true;
 
   if (baseUrl) document.getElementById('baseUrlInput').value = baseUrl;
   if (model)   document.getElementById('modelInput').value   = model;
   if (apiKey)  document.getElementById('apiKeyInput').value  = apiKey;
 
-  if (baseUrl && model && apiKey) {
+  applyProtocolUI(protocol);
+
+  // Collapse if we have enough to make a call
+  const ready = model && apiKey && (protocol === 'anthropic' || baseUrl);
+  if (ready) {
     document.getElementById('apiKeyCard').classList.add('collapsed');
     document.getElementById('apiToggleIcon').classList.add('rotated');
-    updateConfigBadge(model);
+    updateConfigBadge(protocol, model);
   }
 }
 
@@ -408,12 +566,14 @@ function submitQuestion() {
     return;
   }
 
-  const baseUrl = localStorage.getItem('iching_base_url');
-  const model   = localStorage.getItem('iching_model');
-  const apiKey  = localStorage.getItem('iching_api_key');
+  const protocol = localStorage.getItem('iching_protocol') || 'openai';
+  const baseUrl  = localStorage.getItem('iching_base_url') || '';
+  const model    = localStorage.getItem('iching_model')    || '';
+  const apiKey   = localStorage.getItem('iching_api_key')  || '';
 
-  if (!baseUrl || !model || !apiKey) {
-    alert('请先完成模型配置（Base URL、模型名称、API Key）');
+  const ready = model && apiKey && (protocol === 'anthropic' || baseUrl);
+  if (!ready) {
+    alert('请先完成模型配置（模型名称、API Key，以及 OpenAI 兼容协议还需填写 Base URL）');
     document.getElementById('apiKeyCard').classList.remove('collapsed');
     document.getElementById('apiToggleIcon').classList.remove('rotated');
     return;
@@ -796,17 +956,21 @@ function markdownToHtml(text) {
 }
 
 /**
- * Fetches the AI interpretation via an OpenAI-compatible streaming API.
- * Reads Base URL, model, and API key from localStorage.
+ * Fetches the AI interpretation via the configured protocol adapter.
+ * Reads protocol, Base URL, model, and API key from localStorage, then
+ * dispatches through PROTOCOL_ADAPTERS so both OpenAI-compatible and
+ * Anthropic APIs are handled without any protocol-specific logic here.
  * Streams the response text directly into the interpretation card.
  */
 async function getInterpretation() {
-  const baseUrl = localStorage.getItem('iching_base_url');
-  const model   = localStorage.getItem('iching_model');
-  const apiKey  = localStorage.getItem('iching_api_key');
+  const protocol = localStorage.getItem('iching_protocol') || 'openai';
+  const baseUrl  = localStorage.getItem('iching_base_url') || '';
+  const model    = localStorage.getItem('iching_model')    || '';
+  const apiKey   = localStorage.getItem('iching_api_key')  || '';
 
-  if (!baseUrl || !model || !apiKey) {
-    showInterpretationError('未找到模型配置，请点击右上角「⚙️ 模型配置」完成设置');
+  const ready = model && apiKey && (protocol === 'anthropic' || baseUrl);
+  if (!ready) {
+    showInterpretationError('未找到模型配置，请点击「⚙️ 模型配置」完成设置');
     return;
   }
 
@@ -815,27 +979,11 @@ async function getInterpretation() {
   document.getElementById('loadingIndicator').classList.add('active');
 
   const userPrompt = buildPrompt(currentQuestion, currentHexagramNumber, changedHexagramNumber);
-
-  // Endpoint follows OpenAI-compatible convention: <baseUrl>/chat/completions
-  const endpoint = baseUrl.replace(/\/$/, '') + '/chat/completions';
+  const adapter    = PROTOCOL_ADAPTERS[protocol] ?? PROTOCOL_ADAPTERS.openai;
+  const { url, options } = adapter.buildRequest({ baseUrl, model, apiKey }, SYSTEM_PROMPT, userPrompt);
 
   try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type':  'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 1024,
-        stream:     true,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user',   content: userPrompt    },
-        ],
-      }),
-    });
+    const response = await fetch(url, options);
 
     // Surface API-level errors (401 invalid key, 429 rate limit, etc.)
     if (!response.ok) {
@@ -871,8 +1019,8 @@ async function getInterpretation() {
 
         try {
           const json  = JSON.parse(raw);
-          // OpenAI format: choices[0].delta.content
-          const chunk = json.choices?.[0]?.delta?.content ?? '';
+          // Delegate chunk extraction to the protocol adapter
+          const chunk = adapter.extractChunk(json);
           if (!chunk) continue;
 
           fullText += chunk;

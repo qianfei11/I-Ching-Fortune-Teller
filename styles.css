@@ -285,6 +285,44 @@ a:hover { color: var(--color-primary-dark); text-decoration: underline; }
   line-height: 1.6;
 }
 
+/* Protocol selector tabs */
+.protocol-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.protocol-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1.5px solid var(--border-light);
+  border-radius: 20px;
+  font-size: 0.88rem;
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.protocol-tab:has(input:checked) {
+  border-color: var(--color-primary);
+  background: rgba(123, 200, 164, 0.12);
+  color: var(--color-primary-dark);
+  font-weight: 500;
+}
+
+.protocol-tab input[type="radio"] {
+  display: none;
+}
+
+.protocol-note {
+  font-size: 0.84rem;
+  color: var(--text-light);
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
 /* Quick preset buttons */
 .preset-row {
   display: flex;
