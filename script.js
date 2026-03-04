@@ -187,15 +187,15 @@ function calculateTrigrams(lines) {
   let lower = 0;
   let upper = 0;
 
-  // Lower trigram: lines 0–2 (line 1 is LSB)
-  lower |= (lines[0] >= 7 ? 1 : 0) << 0;
-  lower |= (lines[1] >= 7 ? 1 : 0) << 1;
-  lower |= (lines[2] >= 7 ? 1 : 0) << 2;
+  // Lower trigram: lines 0–2. TRIGRAMS encoding: top=bit0 (LSB), bottom=bit2 (MSB).
+  lower |= (lines[2] >= 7 ? 1 : 0) << 0; // top of lower (line 3) → bit0
+  lower |= (lines[1] >= 7 ? 1 : 0) << 1; // middle of lower (line 2) → bit1
+  lower |= (lines[0] >= 7 ? 1 : 0) << 2; // bottom of lower (line 1) → bit2
 
-  // Upper trigram: lines 3–5 (line 4 is LSB relative to upper)
-  upper |= (lines[3] >= 7 ? 1 : 0) << 0;
-  upper |= (lines[4] >= 7 ? 1 : 0) << 1;
-  upper |= (lines[5] >= 7 ? 1 : 0) << 2;
+  // Upper trigram: lines 3–5. Same encoding: top=bit0 (LSB), bottom=bit2 (MSB).
+  upper |= (lines[5] >= 7 ? 1 : 0) << 0; // top of upper (line 6) → bit0
+  upper |= (lines[4] >= 7 ? 1 : 0) << 1; // middle of upper (line 5) → bit1
+  upper |= (lines[3] >= 7 ? 1 : 0) << 2; // bottom of upper (line 4) → bit2
 
   return { lower, upper };
 }
@@ -208,7 +208,8 @@ function calculateTrigrams(lines) {
  */
 function getHexagramNumber(lower, upper) {
   if (lower < 0 || lower > 7 || upper < 0 || upper > 7) return null;
-  return KING_WEN[lower][upper];
+  // KING_WEN columns are ordered Qian(7)→col0 … Kun(0)→col7, so column = 7 - upper.
+  return KING_WEN[lower][7 - upper];
 }
 
 /**
