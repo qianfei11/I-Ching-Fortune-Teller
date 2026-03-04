@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>易经占卜 - I Ching Fortune Teller</title>
+  <link href="https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&family=Noto+Sans+SC:wght@400;500;700&family=Caveat:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <div class="logo-section">
+          <svg class="bagua-logo" viewBox="0 0 100 100" width="60" height="60">
+            <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="2"/>
+            <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+            <circle cx="50" cy="30" r="8" fill="white" stroke="currentColor" stroke-width="1"/>
+            <circle cx="50" cy="70" r="8" fill="black" stroke="currentColor" stroke-width="1"/>
+            <path d="M 50 38 Q 42 54 50 70 Q 58 54 50 38" fill="#7BC8A4" opacity="0.3"/>
+          </svg>
+          <h1 class="title">易经占卜</h1>
+        </div>
+
+        <div class="mascot">
+          <svg viewBox="0 0 100 100" width="50" height="50">
+            <!-- Cat head -->
+            <circle cx="50" cy="50" r="30" fill="#FFB3C1"/>
+            <!-- Ears -->
+            <polygon points="35,25 25,10 40,30" fill="#FFB3C1" stroke="#3D2B1F" stroke-width="1"/>
+            <polygon points="65,25 75,10 60,30" fill="#FFB3C1" stroke="#3D2B1F" stroke-width="1"/>
+            <!-- Eyes -->
+            <circle cx="40" cy="45" r="3" fill="#3D2B1F"/>
+            <circle cx="60" cy="45" r="3" fill="#3D2B1F"/>
+            <!-- Smile -->
+            <path d="M 50 55 Q 48 60 50 62" stroke="#3D2B1F" stroke-width="2" fill="none"/>
+            <!-- Nose -->
+            <circle cx="50" cy="52" r="2" fill="#3D2B1F"/>
+          </svg>
+        </div>
+      </div>
+      <p class="tagline">Ask the ancient wisdom</p>
+    </header>
+
+    <!-- API Key Setup Card -->
+    <section id="apiKeyCard" class="card api-card">
+      <div class="card-header" onclick="toggleApiKeyForm()">
+        <h2>🔑 配置API密钥</h2>
+        <span class="toggle-icon" id="apiToggleIcon">▼</span>
+      </div>
+      <div id="apiKeyForm" class="card-content">
+        <p class="api-note">输入您的 <a href="https://console.anthropic.com/" target="_blank">Anthropic API Key</a>（仅存储在本地浏览器）</p>
+        <div class="input-group">
+          <input type="password" id="apiKeyInput" placeholder="sk-ant-..." class="api-input">
+          <button onclick="toggleApiKeyVisibility()" class="btn-icon">👁️</button>
+        </div>
+        <button onclick="saveApiKey()" class="btn btn-primary">保存密钥</button>
+        <div id="apiStatus" class="status-message"></div>
+      </div>
+    </section>
+
+    <!-- Question Input Card -->
+    <section id="questionCard" class="card">
+      <div class="card-header">
+        <h2>📝 请输入您的问题</h2>
+      </div>
+      <div class="card-content">
+        <textarea id="questionInput" placeholder="例如：我的事业发展如何？" class="question-input" maxlength="200"></textarea>
+        <div class="char-counter">
+          <span id="charCount">0</span>/200
+        </div>
+        <button id="submitBtn" onclick="submitQuestion()" class="btn btn-primary btn-lg">开始起卦</button>
+      </div>
+    </section>
+
+    <!-- Coin Toss Section (hidden initially) -->
+    <section id="coinTossSection" class="section-hidden">
+      <div class="card">
+        <div class="card-header">
+          <h2>🪙 投掷铜币</h2>
+        </div>
+        <div class="card-content">
+          <div class="progress-bar">
+            <span id="roundIndicator">第 <span id="currentRound">1</span> 轮，共 6 轮</span>
+            <div class="progress" style="width: 16.67%;" id="progressBar"></div>
+          </div>
+
+          <div class="coins-container" id="coinsContainer">
+            <div class="coin" data-result="heads">
+              <div class="coin-inner">
+                <div class="coin-face coin-front">☀️</div>
+                <div class="coin-face coin-back">☯️</div>
+              </div>
+            </div>
+            <div class="coin" data-result="heads">
+              <div class="coin-inner">
+                <div class="coin-face coin-front">☀️</div>
+                <div class="coin-face coin-back">☯️</div>
+              </div>
+            </div>
+            <div class="coin" data-result="heads">
+              <div class="coin-inner">
+                <div class="coin-face coin-front">☀️</div>
+                <div class="coin-face coin-back">☯️</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="result-display" id="resultDisplay">准备投掷...</div>
+
+          <div class="button-group">
+            <button onclick="tossCoinRound()" class="btn btn-primary" id="tossBtnText">开始投掷</button>
+            <button onclick="autoTossAll()" class="btn btn-secondary" id="autoTossBtn" style="display: none;">自动投掷全部</button>
+            <button onclick="nextRound()" class="btn btn-secondary" id="nextRoundBtn" style="display: none;">下一轮</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Hexagram Display Card (hidden initially) -->
+    <section id="hexagramSection" class="section-hidden">
+      <div class="card">
+        <div class="card-header">
+          <h2 id="hexagramTitle">卦象</h2>
+        </div>
+        <div class="card-content">
+          <div id="hexagramInfo" class="hexagram-info">
+            <div id="hexagramLineContainer" class="hexagram-lines">
+              <!-- Lines will be drawn here -->
+            </div>
+            <div id="trigramInfo" class="trigram-info"></div>
+          </div>
+
+          <div id="changedHexagramSection" style="display: none;">
+            <hr style="margin: 20px 0; border: none; border-top: 1px dashed #7BC8A4;">
+            <h3>📈 变卦</h3>
+            <div id="changedHexagramLineContainer" class="hexagram-lines"></div>
+            <div id="changedTrigramInfo" class="trigram-info"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- AI Interpretation Card (hidden initially) -->
+    <section id="interpretationSection" class="section-hidden">
+      <div class="card">
+        <div class="card-header">
+          <h2>✨ 卦象解读</h2>
+        </div>
+        <div class="card-content">
+          <div id="interpretationContent" class="interpretation-text">
+            <!-- Claude response will stream here -->
+          </div>
+          <div id="loadingIndicator" class="loading-dots">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Reset Button (hidden initially) -->
+    <div id="resetButtonContainer" class="section-hidden">
+      <button onclick="resetAll()" class="btn btn-primary btn-lg">🔄 重新占卜</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+# GitHub Pages Configuration
+# No Jekyll theme is used - pure static HTML/CSS/JS
+
+theme: null
+markdown: kramdown
+
+# Site configuration
+title: I Ching Fortune Teller
+description: An online I Ching divination system powered by Claude AI
+url: https://bea1e.github.io/I-Ching-Fortune-Teller
+
+# Build settings
+exclude:
+  - .github
+  - .gitignore
+  - README.md
+  - LICENSE
