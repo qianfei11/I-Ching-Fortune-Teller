@@ -9,132 +9,253 @@
 </head>
 <body>
   <div class="container">
-    <!-- Header -->
+
+    <!-- ======= Header ======= -->
     <header class="header">
       <div class="header-content">
         <div class="logo-section">
-          <svg class="bagua-logo" viewBox="0 0 100 100" width="60" height="60">
+          <svg class="bagua-logo" viewBox="0 0 100 100" width="64" height="64" aria-label="八卦图">
             <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="2"/>
-            <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
-            <circle cx="50" cy="30" r="8" fill="white" stroke="currentColor" stroke-width="1"/>
-            <circle cx="50" cy="70" r="8" fill="black" stroke="currentColor" stroke-width="1"/>
-            <path d="M 50 38 Q 42 54 50 70 Q 58 54 50 38" fill="#7BC8A4" opacity="0.3"/>
+            <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="1" opacity="0.4"/>
+            <!-- Yin-Yang halves -->
+            <path d="M50 2 A48 48 0 0 1 50 98 A24 24 0 0 1 50 50 A24 24 0 0 0 50 2Z" fill="currentColor" opacity="0.12"/>
+            <circle cx="50" cy="26" r="10" fill="currentColor" opacity="0.2"/>
+            <circle cx="50" cy="74" r="10" fill="white" stroke="currentColor" stroke-width="1" opacity="0.6"/>
+            <circle cx="50" cy="26" r="4" fill="white"/>
+            <circle cx="50" cy="74" r="4" fill="currentColor" opacity="0.5"/>
           </svg>
-          <h1 class="title">易经占卜</h1>
+          <div class="title-group">
+            <h1 class="title">易经占卜</h1>
+            <span class="title-en">I Ching Fortune</span>
+          </div>
         </div>
-
-        <div class="mascot">
-          <svg viewBox="0 0 100 100" width="50" height="50">
-            <!-- Cat head -->
-            <circle cx="50" cy="50" r="30" fill="#FFB3C1"/>
-            <!-- Ears -->
-            <polygon points="35,25 25,10 40,30" fill="#FFB3C1" stroke="#3D2B1F" stroke-width="1"/>
-            <polygon points="65,25 75,10 60,30" fill="#FFB3C1" stroke="#3D2B1F" stroke-width="1"/>
-            <!-- Eyes -->
-            <circle cx="40" cy="45" r="3" fill="#3D2B1F"/>
-            <circle cx="60" cy="45" r="3" fill="#3D2B1F"/>
-            <!-- Smile -->
-            <path d="M 50 55 Q 48 60 50 62" stroke="#3D2B1F" stroke-width="2" fill="none"/>
-            <!-- Nose -->
-            <circle cx="50" cy="52" r="2" fill="#3D2B1F"/>
+        <div class="mascot" aria-hidden="true">
+          <svg viewBox="0 0 100 100" width="56" height="56">
+            <circle cx="50" cy="55" r="32" fill="#FFB3C1"/>
+            <polygon points="35,28 24,8  42,32" fill="#FFB3C1" stroke="#3D2B1F" stroke-width="1.5"/>
+            <polygon points="65,28 76,8  58,32" fill="#FFB3C1" stroke="#3D2B1F" stroke-width="1.5"/>
+            <ellipse cx="39" cy="43" rx="3.5" ry="4" fill="#3D2B1F"/>
+            <ellipse cx="61" cy="43" rx="3.5" ry="4" fill="#3D2B1F"/>
+            <circle cx="40" cy="42" r="1.2" fill="white"/>
+            <circle cx="62" cy="42" r="1.2" fill="white"/>
+            <ellipse cx="50" cy="52" rx="3" ry="2" fill="#E8799A"/>
+            <path d="M44 58 Q50 64 56 58" stroke="#3D2B1F" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+            <line x1="28" y1="54" x2="20" y2="50" stroke="#3D2B1F" stroke-width="1.2"/>
+            <line x1="28" y1="58" x2="19" y2="57" stroke="#3D2B1F" stroke-width="1.2"/>
+            <line x1="72" y1="54" x2="80" y2="50" stroke="#3D2B1F" stroke-width="1.2"/>
+            <line x1="72" y1="58" x2="81" y2="57" stroke="#3D2B1F" stroke-width="1.2"/>
           </svg>
         </div>
       </div>
-      <p class="tagline">Ask the ancient wisdom</p>
+      <p class="tagline">洞察天机 · 指引人生</p>
+      <p class="tagline-sub">Ask the ancient wisdom, receive modern guidance</p>
+
+      <!-- Eight trigrams decorative strip -->
+      <div class="trigrams-strip" aria-hidden="true">
+        <span title="乾·天">☰</span>
+        <span title="兑·泽">☱</span>
+        <span title="离·火">☲</span>
+        <span title="震·雷">☳</span>
+        <span title="巽·风">☴</span>
+        <span title="坎·水">☵</span>
+        <span title="艮·山">☶</span>
+        <span title="坤·地">☷</span>
+      </div>
     </header>
 
-    <!-- API Key Setup Card -->
-    <section id="apiKeyCard" class="card api-card">
+    <!-- ======= How it works — 3-step intro ======= -->
+    <div class="intro-steps">
+      <div class="step">
+        <div class="step-icon">✍️</div>
+        <div class="step-body">
+          <div class="step-title">提问</div>
+          <div class="step-desc">写下心中的困惑或疑问</div>
+        </div>
+      </div>
+      <div class="step-arrow">›</div>
+      <div class="step">
+        <div class="step-icon">🪙</div>
+        <div class="step-body">
+          <div class="step-title">起卦</div>
+          <div class="step-desc">投掷三枚铜币，共六轮</div>
+        </div>
+      </div>
+      <div class="step-arrow">›</div>
+      <div class="step">
+        <div class="step-icon">✨</div>
+        <div class="step-body">
+          <div class="step-title">解卦</div>
+          <div class="step-desc">AI 占卜师解读卦象启示</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======= API / Model Config Card ======= -->
+    <section id="apiKeyCard" class="card api-card collapsed">
       <div class="card-header" onclick="toggleApiKeyForm()">
-        <h2>🔑 配置API密钥</h2>
-        <span class="toggle-icon" id="apiToggleIcon">▼</span>
+        <div class="card-header-left">
+          <h2>⚙️ 模型配置</h2>
+          <span id="apiConfigStatus" class="config-badge">未配置</span>
+        </div>
+        <span class="toggle-icon rotated" id="apiToggleIcon">▼</span>
       </div>
       <div id="apiKeyForm" class="card-content">
-        <p class="api-note">输入您的 <a href="https://console.anthropic.com/" target="_blank">Anthropic API Key</a>（仅存储在本地浏览器）</p>
-        <div class="input-group">
-          <input type="password" id="apiKeyInput" placeholder="sk-ant-..." class="api-input">
-          <button onclick="toggleApiKeyVisibility()" class="btn-icon">👁️</button>
+        <p class="api-note">
+          支持任何 <strong>OpenAI 兼容</strong> 的 API（OpenAI、DeepSeek、Qwen、Ollama 等）。
+          配置仅存储在您的本地浏览器中，不会上传至任何服务器。
+        </p>
+
+        <!-- Quick presets -->
+        <div class="preset-row">
+          <span class="preset-label">快速填入：</span>
+          <button class="preset-btn" onclick="applyPreset('openai')">OpenAI</button>
+          <button class="preset-btn" onclick="applyPreset('deepseek')">DeepSeek</button>
+          <button class="preset-btn" onclick="applyPreset('qwen')">通义千问</button>
+          <button class="preset-btn" onclick="applyPreset('ollama')">Ollama</button>
         </div>
-        <button onclick="saveApiKey()" class="btn btn-primary">保存密钥</button>
+
+        <div class="config-fields">
+          <div class="field-group">
+            <label class="field-label" for="baseUrlInput">Base URL</label>
+            <input type="url" id="baseUrlInput"
+              placeholder="https://api.openai.com/v1"
+              class="api-input" autocomplete="off">
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="modelInput">模型名称</label>
+            <input type="text" id="modelInput"
+              placeholder="gpt-4o-mini"
+              class="api-input" autocomplete="off">
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="apiKeyInput">API Key</label>
+            <div class="input-group">
+              <input type="password" id="apiKeyInput"
+                placeholder="sk-..."
+                class="api-input" autocomplete="off">
+              <button onclick="toggleApiKeyVisibility()" class="btn-icon" title="显示/隐藏">👁️</button>
+            </div>
+          </div>
+        </div>
+
+        <button onclick="saveApiKey()" class="btn btn-primary">保存配置</button>
         <div id="apiStatus" class="status-message"></div>
       </div>
     </section>
 
-    <!-- Question Input Card -->
+    <!-- ======= Question Input Card ======= -->
     <section id="questionCard" class="card">
       <div class="card-header">
         <h2>📝 请输入您的问题</h2>
       </div>
       <div class="card-content">
-        <textarea id="questionInput" placeholder="例如：我的事业发展如何？" class="question-input" maxlength="200"></textarea>
-        <div class="char-counter">
-          <span id="charCount">0</span>/200
+        <p class="question-hint">问题越具体，解读越精准。可点击下方示例快速输入：</p>
+
+        <!-- Suggestion chips -->
+        <div class="suggestion-chips">
+          <button class="chip" onclick="fillQuestion('近期事业发展方向如何？')">💼 事业发展</button>
+          <button class="chip" onclick="fillQuestion('这段感情/婚姻的走向如何？')">💕 感情走向</button>
+          <button class="chip" onclick="fillQuestion('近期财运如何，有什么需要注意的？')">💰 财运好坏</button>
+          <button class="chip" onclick="fillQuestion('当前健康状况需要注意什么？')">🌿 健康状况</button>
+          <button class="chip" onclick="fillQuestion('这个重要决定应该如何抉择？')">🔮 重要抉择</button>
+          <button class="chip" onclick="fillQuestion('近期学业/考试运势如何？')">📚 学业考试</button>
         </div>
-        <button id="submitBtn" onclick="submitQuestion()" class="btn btn-primary btn-lg">开始起卦</button>
+
+        <textarea id="questionInput"
+          placeholder="例如：我现在面临跳槽机会，是否应该换工作？"
+          class="question-input" maxlength="200"></textarea>
+
+        <div class="question-footer">
+          <span class="char-counter"><span id="charCount">0</span>/200</span>
+          <button id="submitBtn" onclick="submitQuestion()" class="btn btn-primary btn-lg">开始起卦 →</button>
+        </div>
       </div>
     </section>
 
-    <!-- Coin Toss Section (hidden initially) -->
+    <!-- ======= Coin Toss Section (hidden initially) ======= -->
     <section id="coinTossSection" class="section-hidden">
       <div class="card">
         <div class="card-header">
           <h2>🪙 投掷铜币</h2>
+          <span class="round-badge" id="roundBadge">1 / 6</span>
         </div>
         <div class="card-content">
+
+          <!-- Progress -->
           <div class="progress-bar">
+            <div class="progress-track">
+              <div class="progress" style="width: 0%;" id="progressBar"></div>
+            </div>
             <span id="roundIndicator">第 <span id="currentRound">1</span> 轮，共 6 轮</span>
-            <div class="progress" style="width: 0%;" id="progressBar"></div>
           </div>
 
+          <!-- Coins -->
           <div class="coins-container" id="coinsContainer">
-            <div class="coin" data-result="heads">
+            <div class="coin">
               <div class="coin-inner">
-                <div class="coin-face coin-front">☀️</div>
-                <div class="coin-face coin-back">☯️</div>
+                <div class="coin-face coin-front">☀</div>
+                <div class="coin-face coin-back">☯</div>
               </div>
             </div>
-            <div class="coin" data-result="heads">
+            <div class="coin">
               <div class="coin-inner">
-                <div class="coin-face coin-front">☀️</div>
-                <div class="coin-face coin-back">☯️</div>
+                <div class="coin-face coin-front">☀</div>
+                <div class="coin-face coin-back">☯</div>
               </div>
             </div>
-            <div class="coin" data-result="heads">
+            <div class="coin">
               <div class="coin-inner">
-                <div class="coin-face coin-front">☀️</div>
-                <div class="coin-face coin-back">☯️</div>
+                <div class="coin-face coin-front">☀</div>
+                <div class="coin-face coin-back">☯</div>
               </div>
             </div>
           </div>
 
-          <div class="result-display" id="resultDisplay">准备投掷...</div>
+          <!-- Round result -->
+          <div class="result-display" id="resultDisplay">点击「开始投掷」开始第一轮</div>
+
+          <!-- Line history mini-display -->
+          <div id="lineHistory" class="line-history"></div>
+
+          <!-- Coin legend -->
+          <div class="coin-legend">
+            <span class="legend-title">点数说明：</span>
+            <span class="legend-item"><em>6</em> 老阴·变爻</span>
+            <span class="legend-item"><em>7</em> 少阳</span>
+            <span class="legend-item"><em>8</em> 少阴</span>
+            <span class="legend-item"><em>9</em> 老阳·变爻</span>
+          </div>
 
           <div class="button-group">
             <button onclick="tossCoinRound()" class="btn btn-primary" id="tossBtnText">开始投掷</button>
-            <button onclick="autoTossAll()" class="btn btn-secondary" id="autoTossBtn" style="display: none;">自动投掷全部</button>
-            <button onclick="nextRound()" class="btn btn-secondary" id="nextRoundBtn" style="display: none;">下一轮</button>
+            <button onclick="autoTossAll()"   class="btn btn-secondary" id="autoTossBtn" style="display:none;">自动起卦</button>
+            <button onclick="nextRound()"     class="btn btn-secondary" id="nextRoundBtn" style="display:none;">下一轮</button>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Hexagram Display Card (hidden initially) -->
+    <!-- ======= Hexagram Display Card (hidden initially) ======= -->
     <section id="hexagramSection" class="section-hidden">
       <div class="card">
         <div class="card-header">
           <h2 id="hexagramTitle">卦象</h2>
         </div>
         <div class="card-content">
+          <!-- Hexagram description quote -->
+          <blockquote id="hexagramDesc" class="hexagram-desc"></blockquote>
+
           <div id="hexagramInfo" class="hexagram-info">
             <div id="hexagramLineContainer" class="hexagram-lines">
-              <!-- Lines will be drawn here -->
+              <!-- Lines rendered by JS -->
             </div>
             <div id="trigramInfo" class="trigram-info"></div>
           </div>
 
-          <div id="changedHexagramSection" style="display: none;">
+          <!-- Changed hexagram -->
+          <div id="changedHexagramSection" style="display:none;">
             <hr class="section-divider">
-            <h3 id="changedHexagramTitle">📈 变卦</h3>
+            <h3 id="changedHexagramTitle" class="changed-title">📈 之卦</h3>
             <div id="changedHexagramLineContainer" class="hexagram-lines"></div>
             <div id="changedTrigramInfo" class="trigram-info"></div>
           </div>
@@ -142,28 +263,42 @@
       </div>
     </section>
 
-    <!-- AI Interpretation Card (hidden initially) -->
+    <!-- ======= AI Interpretation Card (hidden initially) ======= -->
     <section id="interpretationSection" class="section-hidden">
       <div class="card">
         <div class="card-header">
           <h2>✨ 卦象解读</h2>
         </div>
         <div class="card-content">
-          <div id="interpretationContent" class="interpretation-text">
-            <!-- Claude response will stream here -->
-          </div>
           <div id="loadingIndicator" class="loading-dots">
             <span></span><span></span><span></span>
+            <span class="loading-label">占卜师正在解卦…</span>
           </div>
+          <div id="interpretationContent" class="interpretation-text"></div>
         </div>
       </div>
     </section>
 
-    <!-- Reset Button (hidden initially) -->
-    <div id="resetButtonContainer" class="section-hidden">
+    <!-- ======= Reset Button (hidden initially) ======= -->
+    <div id="resetButtonContainer" class="section-hidden reset-container">
+      <div class="reset-divider">— 本次占卜结束 —</div>
       <button onclick="resetAll()" class="btn btn-primary btn-lg">🔄 重新占卜</button>
     </div>
-  </div>
+
+    <!-- ======= Footer ======= -->
+    <footer class="site-footer">
+      <div class="footer-trigrams" aria-hidden="true">☰ ☱ ☲ ☳ ☴ ☵ ☶ ☷</div>
+      <p class="footer-text">
+        易经 · 周文王著 &nbsp;·&nbsp; AI 解读仅供参考，请理性看待
+      </p>
+      <p class="footer-sub">
+        <a href="https://qianfei11.github.io/I-Ching-Fortune-Teller/" target="_blank" rel="noopener">
+          qianfei11.github.io/I-Ching-Fortune-Teller
+        </a>
+      </p>
+    </footer>
+
+  </div><!-- .container -->
 
   <script src="script.js"></script>
 </body>

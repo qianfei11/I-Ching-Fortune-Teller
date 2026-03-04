@@ -281,9 +281,31 @@ function showStatus(elementId, type, message) {
   }
 }
 
-// ============ API Key Management ============
+// ============ API / Model Configuration ============
 
-/** Collapses or expands the API key input form. */
+/**
+ * Preset configurations for common OpenAI-compatible providers.
+ * Each entry provides the base URL and default model name.
+ */
+const PRESETS = {
+  openai:   { url: 'https://api.openai.com/v1',               model: 'gpt-4o-mini' },
+  deepseek: { url: 'https://api.deepseek.com/v1',             model: 'deepseek-chat' },
+  qwen:     { url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-turbo' },
+  ollama:   { url: 'http://localhost:11434/v1',               model: 'llama3' },
+};
+
+/**
+ * Fills in the Base URL and Model fields from a preset provider.
+ * @param {string} name - Preset key (openai | deepseek | qwen | ollama)
+ */
+function applyPreset(name) {
+  const preset = PRESETS[name];
+  if (!preset) return;
+  document.getElementById('baseUrlInput').value = preset.url;
+  document.getElementById('modelInput').value   = preset.model;
+}
+
+/** Collapses or expands the API config form. */
 function toggleApiKeyForm() {
   document.getElementById('apiKeyCard').classList.toggle('collapsed');
   document.getElementById('apiToggleIcon').classList.toggle('rotated');
@@ -296,27 +318,25 @@ function toggleApiKeyVisibility() {
 }
 
 /**
- * Saves the API key to localStorage and collapses the form.
- * Warns if the key format looks incorrect, but saves anyway.
+ * Saves Base URL, model name, and API key to localStorage,
+ * then collapses the config card and updates the status badge.
  */
 function saveApiKey() {
-  const apiKey = document.getElementById('apiKeyInput').value.trim();
+  const baseUrl = document.getElementById('baseUrlInput').value.trim();
+  const model   = document.getElementById('modelInput').value.trim();
+  const apiKey  = document.getElementById('apiKeyInput').value.trim();
 
-  if (!apiKey) {
-    showStatus('apiStatus', 'error', '请输入API密钥');
-    return;
-  }
+  if (!baseUrl) { showStatus('apiStatus', 'error', '请输入 Base URL'); return; }
+  if (!model)   { showStatus('apiStatus', 'error', '请输入模型名称'); return; }
+  if (!apiKey)  { showStatus('apiStatus', 'error', '请输入 API Key'); return; }
 
-  // Save regardless of format — user may have a valid key with unexpected prefix
-  localStorage.setItem('iching_api_key', apiKey);
+  localStorage.setItem('iching_base_url', baseUrl);
+  localStorage.setItem('iching_model',    model);
+  localStorage.setItem('iching_api_key',  apiKey);
 
-  if (!apiKey.startsWith('sk-ant-')) {
-    showStatus('apiStatus', 'warning', '⚠ 密钥格式可能不正确，已尝试保存');
-  } else {
-    showStatus('apiStatus', 'success', '✓ API密钥已安全保存');
-  }
+  showStatus('apiStatus', 'success', `✓ 已保存：${model} @ ${baseUrl}`);
+  updateConfigBadge(model);
 
-  // Auto-collapse after a short delay
   setTimeout(() => {
     document.getElementById('apiKeyCard').classList.add('collapsed');
     document.getElementById('apiToggleIcon').classList.add('rotated');
@@ -324,19 +344,42 @@ function saveApiKey() {
 }
 
 /**
- * Loads a previously saved API key from localStorage.
- * If found, pre-fills the input and collapses the card.
+ * Updates the small badge in the API card header.
+ * @param {string|null} model - Model name, or null if not configured
  */
-function loadApiKeyIfExists() {
-  const saved = localStorage.getItem('iching_api_key');
-  if (saved) {
-    document.getElementById('apiKeyInput').value = saved;
-    document.getElementById('apiKeyCard').classList.add('collapsed');
-    document.getElementById('apiToggleIcon').classList.add('rotated');
+function updateConfigBadge(model) {
+  const badge = document.getElementById('apiConfigStatus');
+  if (!badge) return;
+  if (model) {
+    badge.textContent = model;
+    badge.classList.add('ok');
+  } else {
+    badge.textContent = '未配置';
+    badge.classList.remove('ok');
   }
 }
 
-// ============ Character Counter ============
+/**
+ * Loads saved configuration from localStorage and pre-fills the form.
+ * Collapses the card only if all three fields are present.
+ */
+function loadApiKeyIfExists() {
+  const baseUrl = localStorage.getItem('iching_base_url');
+  const model   = localStorage.getItem('iching_model');
+  const apiKey  = localStorage.getItem('iching_api_key');
+
+  if (baseUrl) document.getElementById('baseUrlInput').value = baseUrl;
+  if (model)   document.getElementById('modelInput').value   = model;
+  if (apiKey)  document.getElementById('apiKeyInput').value  = apiKey;
+
+  if (baseUrl && model && apiKey) {
+    document.getElementById('apiKeyCard').classList.add('collapsed');
+    document.getElementById('apiToggleIcon').classList.add('rotated');
+    updateConfigBadge(model);
+  }
+}
+
+// ============ Question Input Helpers ============
 
 /** Updates the character count display for the question textarea. */
 function updateCharCount() {
@@ -344,9 +387,20 @@ function updateCharCount() {
   document.getElementById('charCount').textContent = len;
 }
 
+/**
+ * Fills the question textarea with a suggested question from a chip click.
+ * @param {string} text - The suggested question text
+ */
+function fillQuestion(text) {
+  const ta = document.getElementById('questionInput');
+  ta.value = text;
+  ta.focus();
+  updateCharCount();
+}
+
 // ============ Main Interaction Flow ============
 
-/** Validates the question and API key, then transitions to the coin toss phase. */
+/** Validates the question and API config, then transitions to the coin toss phase. */
 function submitQuestion() {
   const question = document.getElementById('questionInput').value.trim();
   if (!question) {
@@ -354,9 +408,12 @@ function submitQuestion() {
     return;
   }
 
-  const apiKey = localStorage.getItem('iching_api_key');
-  if (!apiKey) {
-    alert('请先配置 API 密钥');
+  const baseUrl = localStorage.getItem('iching_base_url');
+  const model   = localStorage.getItem('iching_model');
+  const apiKey  = localStorage.getItem('iching_api_key');
+
+  if (!baseUrl || !model || !apiKey) {
+    alert('请先完成模型配置（Base URL、模型名称、API Key）');
     document.getElementById('apiKeyCard').classList.remove('collapsed');
     document.getElementById('apiToggleIcon').classList.remove('rotated');
     return;
@@ -376,9 +433,11 @@ function submitQuestion() {
   document.getElementById('nextRoundBtn').style.display = 'none';
   document.getElementById('nextRoundBtn').textContent   = '下一轮';
   document.getElementById('nextRoundBtn').onclick       = nextRound;
-  document.getElementById('resultDisplay').textContent  = '准备投掷…';
+  document.getElementById('resultDisplay').textContent  = '点击「开始投掷」开始第一轮';
+  document.getElementById('lineHistory').innerHTML      = '';
   updateRoundIndicator();
   updateProgressBar();
+  updateRoundBadge();
 
   hideSection('hexagramSection');
   hideSection('interpretationSection');
@@ -403,6 +462,35 @@ function updateProgressBar() {
   document.getElementById('progressBar').style.width = pct + '%';
 }
 
+/** Updates the "N / 6" badge in the coin card header. */
+function updateRoundBadge() {
+  const badge = document.getElementById('roundBadge');
+  if (badge) badge.textContent = `${Math.min(currentRound, 6)} / 6`;
+}
+
+/**
+ * Redraws the compact line-history strip below the result display.
+ * Each completed round gets a color-coded dot showing yang/yin/changing state.
+ */
+function updateLineHistory() {
+  const container = document.getElementById('lineHistory');
+  if (!container) return;
+  container.innerHTML = '';
+
+  currentLineValues.forEach((val, idx) => {
+    const dot = document.createElement('div');
+    dot.className = 'history-dot';
+    dot.title = `第${idx + 1}爻：${lineTypeDisplayName(lineType(val))}`;
+
+    if      (val === 9) { dot.classList.add('old-yang'); dot.textContent = '老阳'; }
+    else if (val === 7) { dot.classList.add('yang');     dot.textContent = '少阳'; }
+    else if (val === 8) { dot.classList.add('yin');      dot.textContent = '少阴'; }
+    else                { dot.classList.add('old-yin');  dot.textContent = '老阴'; }
+
+    container.appendChild(dot);
+  });
+}
+
 /**
  * Executes one round of three-coin tossing:
  *  1. Rolls coins, stores the result.
@@ -424,12 +512,15 @@ function tossCoinRound() {
 
   // Update UI after the animation finishes (800 ms)
   setTimeout(() => {
-    const typeName = lineTypeDisplayName(lineType(value));
+    const type    = lineType(value);
+    const typeName = lineTypeDisplayName(type);
     document.getElementById('resultDisplay').textContent =
-      `第 ${currentRound} 轮: 点数 ${value} → ${typeName}`;
+      `第 ${currentRound} 轮：点数 ${value} → ${typeName}`;
 
     updateRoundIndicator();
     updateProgressBar();
+    updateLineHistory();
+    updateRoundBadge();
 
     if (currentRound < 6) {
       // Show "next round" button only if not in auto-toss mode
@@ -562,7 +653,12 @@ function renderHexagram() {
 
   // Update the card header title
   document.getElementById('hexagramTitle').innerHTML =
-    `第 ${currentHexagramNumber} 卦 · <span style="font-size:1.5rem;">${hexData.name}</span>`;
+    `第 ${currentHexagramNumber} 卦 · <span style="font-size:1.5rem;">${hexData.name}</span>` +
+    `<span style="font-size:0.9rem;color:var(--text-light);margin-left:8px;">${hexData.meaning}</span>`;
+
+  // Show the classical hexagram text as a blockquote
+  const descEl = document.getElementById('hexagramDesc');
+  if (descEl) descEl.textContent = `卦辞：${hexData.desc}`;
 
   // Render the 6 lines and trigram info for the primary hexagram
   renderHexagramLines(currentLineValues, 'hexagramLineContainer');
@@ -618,6 +714,8 @@ function resetAll() {
 
   document.getElementById('questionInput').value = '';
   document.getElementById('charCount').textContent = '0';
+  document.getElementById('lineHistory').innerHTML = '';
+  updateRoundBadge();
 
   showSection('questionCard');
   hideSection('coinTossSection');
@@ -698,13 +796,17 @@ function markdownToHtml(text) {
 }
 
 /**
- * Fetches the AI interpretation via the Anthropic API with SSE streaming.
+ * Fetches the AI interpretation via an OpenAI-compatible streaming API.
+ * Reads Base URL, model, and API key from localStorage.
  * Streams the response text directly into the interpretation card.
  */
 async function getInterpretation() {
-  const apiKey = localStorage.getItem('iching_api_key');
-  if (!apiKey) {
-    showInterpretationError('未找到 API 密钥，请重新配置');
+  const baseUrl = localStorage.getItem('iching_base_url');
+  const model   = localStorage.getItem('iching_model');
+  const apiKey  = localStorage.getItem('iching_api_key');
+
+  if (!baseUrl || !model || !apiKey) {
+    showInterpretationError('未找到模型配置，请点击右上角「⚙️ 模型配置」完成设置');
     return;
   }
 
@@ -714,21 +816,24 @@ async function getInterpretation() {
 
   const userPrompt = buildPrompt(currentQuestion, currentHexagramNumber, changedHexagramNumber);
 
+  // Endpoint follows OpenAI-compatible convention: <baseUrl>/chat/completions
+  const endpoint = baseUrl.replace(/\/$/, '') + '/chat/completions';
+
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
-        'x-api-key':                              apiKey,
-        'anthropic-version':                      '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        'content-type':                           'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type':  'application/json',
       },
       body: JSON.stringify({
-        model:      'claude-opus-4-6',
+        model,
         max_tokens: 1024,
         stream:     true,
-        system:     SYSTEM_PROMPT,
-        messages:   [{ role: 'user', content: userPrompt }],
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user',   content: userPrompt    },
+        ],
       }),
     });
 
@@ -738,11 +843,11 @@ async function getInterpretation() {
       try {
         const errData = await response.json();
         errMsg = errData.error?.message || errMsg;
-      } catch (_) { /* response wasn't JSON */ }
+      } catch (_) { /* response body wasn't JSON */ }
       throw new Error(errMsg);
     }
 
-    // Parse the Server-Sent Events stream
+    // Parse the Server-Sent Events (SSE) stream
     const reader  = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer   = '';
@@ -754,7 +859,7 @@ async function getInterpretation() {
 
       buffer += decoder.decode(value, { stream: true });
 
-      // Process all complete lines; keep any trailing incomplete line in buffer
+      // Process all complete lines; keep any trailing incomplete fragment in buffer
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? '';
 
@@ -765,8 +870,9 @@ async function getInterpretation() {
         if (raw === '[DONE]') break;
 
         try {
-          const json = JSON.parse(raw);
-          const chunk = json.delta?.text ?? '';
+          const json  = JSON.parse(raw);
+          // OpenAI format: choices[0].delta.content
+          const chunk = json.choices?.[0]?.delta?.content ?? '';
           if (!chunk) continue;
 
           fullText += chunk;
