@@ -137,12 +137,13 @@ function tossCoin() {
 }
 
 /**
- * Simulates tossing three coins and returns their sum.
+ * Simulates tossing three coins and returns their individual values and sum.
  * Possible sums: 6 (old yin), 7 (young yang), 8 (young yin), 9 (old yang).
- * @returns {number} Sum of three coins in range [6, 9]
+ * @returns {{coins: number[], sum: number}} Individual coin values (2 or 3) and their sum
  */
 function tossThreeCoins() {
-  return tossCoin() + tossCoin() + tossCoin();
+  const coins = [tossCoin(), tossCoin(), tossCoin()];
+  return { coins, sum: coins[0] + coins[1] + coins[2] };
 }
 
 /**
@@ -660,14 +661,19 @@ function updateLineHistory() {
 function tossCoinRound() {
   if (currentRound >= 6) return; // Safety guard
 
-  const value = tossThreeCoins();
+  const { coins, sum: value } = tossThreeCoins();
   currentLineValues.push(value);
   currentRound++;
 
-  // Trigger flip animation on each coin
-  document.querySelectorAll('.coin').forEach(coin => {
+  // Trigger flip animation on each coin, then show actual result face
+  document.querySelectorAll('.coin').forEach((coin, i) => {
     coin.classList.add('flipping');
-    setTimeout(() => coin.classList.remove('flipping'), 800);
+    setTimeout(() => {
+      coin.classList.remove('flipping');
+      // 3 = heads (yang) → front face; 2 = tails (yin) → back face (rotateY 180deg)
+      coin.querySelector('.coin-inner').style.transform =
+        coins[i] === 3 ? 'rotateY(0deg)' : 'rotateY(180deg)';
+    }, 800);
   });
 
   // Update UI after the animation finishes (800 ms)
