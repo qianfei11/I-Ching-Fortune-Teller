@@ -7,7 +7,7 @@
 
 /**
  * 八卦 (8 Trigrams), indexed by binary value.
- * Binary encoding: line1=LSB, line3=MSB (bottom line is least significant bit)
+ * Binary encoding: top line = bit0 (LSB), middle line = bit1, bottom line = bit2 (MSB).
  * Each trigram has three lines; 1 = yang (solid), 0 = yin (broken).
  */
 const TRIGRAMS = {
@@ -162,6 +162,16 @@ function lineType(value) {
 }
 
 /**
+ * Returns whether a coin-sum value represents a yang line.
+ * In the three-coin method, 7 and 9 are yang; 6 and 8 are yin.
+ * @param {number} value - Coin sum (6, 7, 8, or 9)
+ * @returns {boolean}
+ */
+function isYangLine(value) {
+  return value === 7 || value === 9;
+}
+
+/**
  * Converts a line type to a human-readable Chinese label.
  * @param {string} type - One of the lineType return values
  * @returns {string} Chinese display name
@@ -178,7 +188,7 @@ function lineTypeDisplayName(type) {
 /**
  * Calculates the lower and upper trigram binary indices from 6 line values.
  * Lower trigram = lines[0..2], upper trigram = lines[3..5].
- * A yang line (value >= 7) contributes 1; yin (value < 7) contributes 0.
+ * A yang line (7 or 9) contributes 1; yin (6 or 8) contributes 0.
  *
  * @param {number[]} lines - Array of 6 coin sums (index 0 = bottom/first line)
  * @returns {{ lower: number, upper: number }} Trigram indices (0–7)
@@ -188,14 +198,14 @@ function calculateTrigrams(lines) {
   let upper = 0;
 
   // Lower trigram: lines 0–2. TRIGRAMS encoding: top=bit0 (LSB), bottom=bit2 (MSB).
-  lower |= (lines[2] >= 7 ? 1 : 0) << 0; // top of lower (line 3) → bit0
-  lower |= (lines[1] >= 7 ? 1 : 0) << 1; // middle of lower (line 2) → bit1
-  lower |= (lines[0] >= 7 ? 1 : 0) << 2; // bottom of lower (line 1) → bit2
+  lower |= (isYangLine(lines[2]) ? 1 : 0) << 0; // top of lower (line 3) → bit0
+  lower |= (isYangLine(lines[1]) ? 1 : 0) << 1; // middle of lower (line 2) → bit1
+  lower |= (isYangLine(lines[0]) ? 1 : 0) << 2; // bottom of lower (line 1) → bit2
 
   // Upper trigram: lines 3–5. Same encoding: top=bit0 (LSB), bottom=bit2 (MSB).
-  upper |= (lines[5] >= 7 ? 1 : 0) << 0; // top of upper (line 6) → bit0
-  upper |= (lines[4] >= 7 ? 1 : 0) << 1; // middle of upper (line 5) → bit1
-  upper |= (lines[3] >= 7 ? 1 : 0) << 2; // bottom of upper (line 4) → bit2
+  upper |= (isYangLine(lines[5]) ? 1 : 0) << 0; // top of upper (line 6) → bit0
+  upper |= (isYangLine(lines[4]) ? 1 : 0) << 1; // middle of upper (line 5) → bit1
+  upper |= (isYangLine(lines[3]) ? 1 : 0) << 2; // bottom of upper (line 4) → bit2
 
   return { lower, upper };
 }
@@ -267,6 +277,15 @@ function hideSection(sectionId) {
     el.classList.add('section-hidden');
     el.classList.remove('visible');
   }
+}
+
+/** Restores the three coin widgets to their default front-face state. */
+function resetCoinFaces() {
+  document.querySelectorAll('.coin').forEach((coin) => {
+    coin.classList.remove('flipping');
+    const inner = coin.querySelector('.coin-inner');
+    if (inner) inner.style.transform = 'rotateY(0deg)';
+  });
 }
 
 /**
@@ -597,6 +616,7 @@ function submitQuestion() {
   document.getElementById('nextRoundBtn').onclick       = nextRound;
   document.getElementById('resultDisplay').textContent  = '点击「开始投掷」开始第一轮';
   document.getElementById('lineHistory').innerHTML      = '';
+  resetCoinFaces();
   updateRoundIndicator();
   updateProgressBar();
   updateRoundBadge();
@@ -771,7 +791,7 @@ function renderHexagramLines(lines, containerId, baseDelay = 0) {
     lineEl.style.animationDelay = `${baseDelay + i * 0.15}s`;
 
     // Determine the CSS class for the line visual
-    const isYang = type === 'young-yang' || type === 'old-yang';
+    const isYang = isYangLine(value);
     const lineClass = isYang ? 'line-yang' : 'line-yin';
 
     // Show a marker for changing lines (old yin=六, old yang=九)
@@ -882,6 +902,7 @@ function resetAll() {
   document.getElementById('questionInput').value = '';
   document.getElementById('charCount').textContent = '0';
   document.getElementById('lineHistory').innerHTML = '';
+  resetCoinFaces();
   updateRoundBadge();
 
   showSection('questionCard');
