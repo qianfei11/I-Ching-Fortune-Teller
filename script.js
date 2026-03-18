@@ -237,6 +237,30 @@ function describeInterpretationMethod(lines, hexagramNum) {
 }
 
 /**
+ * Describes which exact text the model should look up when web search is available.
+ * @param {number[]} lines - Array of 6 coin sums (index 0 = bottom/first line)
+ * @param {number} hexagramNum - Primary hexagram number
+ * @param {number|null} changedHexNum - Changed hexagram number, if any
+ * @returns {string} Search instruction string
+ */
+function describeYaoSearchTarget(lines, hexagramNum, changedHexNum) {
+  const changingLines = getChangingLinePositions(lines);
+  const count = changingLines.length;
+  const unchangedLines = [1, 2, 3, 4, 5, 6].filter(pos => !changingLines.includes(pos));
+  const changedLabel = changedHexNum && changedHexNum !== hexagramNum ? `第${changedHexNum}卦` : '之卦';
+
+  if (count === 0) return '本次规则只看本卦卦辞，无需联网检索爻辞原文。';
+  if (count === 1) return `若可联网，请检索“第${hexagramNum}卦 第${changingLines[0]}爻 爻辞原文”。`;
+  if (count === 2) return `若可联网，请分别检索“第${hexagramNum}卦 第${changingLines[0]}爻 爻辞原文”和“第${hexagramNum}卦 第${changingLines[1]}爻 爻辞原文”。`;
+  if (count === 3) return '本次规则主要看本卦与之卦的卦辞，无需联网检索爻辞原文。';
+  if (count === 4) return `若可联网，请分别检索“${changedLabel} 第${unchangedLines[0]}爻 爻辞原文”和“${changedLabel} 第${unchangedLines[1]}爻 爻辞原文”。`;
+  if (count === 5) return `若可联网，请检索“${changedLabel} 第${unchangedLines[0]}爻 爻辞原文”。`;
+  if (hexagramNum === 1) return '若可联网，请检索“坤卦 用六 爻辞 原文”。';
+  if (hexagramNum === 2) return '若可联网，请检索“乾卦 用九 爻辞 原文”。';
+  return '本次规则只看之卦卦辞，无需联网检索爻辞原文。';
+}
+
+/**
  * Calculates the lower and upper trigram binary indices from 6 line values.
  * Lower trigram = lines[0..2], upper trigram = lines[3..5].
  * A yang line (7 or 9) contributes 1; yin (6 or 8) contributes 0.
@@ -462,7 +486,7 @@ const PROTOCOL_ADAPTERS = {
  */
 const PRESETS = {
   // ── OpenAI-compatible ──────────────────────────────────
-  openai:        { protocol: 'openai',    url: 'https://api.openai.com/v1',                          model: 'gpt-4o-mini'           },
+  openai:        { protocol: 'openai',    url: 'https://api.openai.com/v1',                          model: 'gpt-4o-mini-search-preview' },
   deepseek:      { protocol: 'openai',    url: 'https://api.deepseek.com/v1',                        model: 'deepseek-chat'         },
   qwen:          { protocol: 'openai',    url: 'https://dashscope.aliyuncs.com/compatible-mode/v1',  model: 'qwen-turbo'            },
   ollama:        { protocol: 'openai',    url: 'http://localhost:11434/v1',                          model: 'llama3'                },
@@ -513,7 +537,7 @@ function applyProtocolUI(protocol) {
 
   document.getElementById('protocolNote').textContent = isAnthropic
     ? 'Anthropic 官方 API，无需填写 Base URL（端点固定）。需要 Anthropic Console 颁发的 API Key。'
-    : '支持 OpenAI、DeepSeek、通义千问、Ollama 等任意兼容 /chat/completions 接口。';
+    : '支持 OpenAI、DeepSeek、通义千问、Ollama 等任意兼容接口；若使用 OpenAI 官方 API，将自动启用 Responses API + Web search 检索爻辞原文，其它兼容接口仍使用普通 /chat/completions。';
 
   document.getElementById('apiKeyInput').placeholder = isAnthropic
     ? 'sk-ant-...'
@@ -988,6 +1012,7 @@ const SYSTEM_PROMPT = `你是一位熟悉《周易》占断次序的解卦者。
 - 必须严格按上面的规则决定“看什么”为主，不能自行换规则。
 - 只能使用输入中明确给出的卦辞、卦名、动爻信息。
 - 如果规则要求看某条爻辞，但系统没有提供这条爻辞原文，你必须明确说明“本系统未提供该爻原文”，然后基于爻位、上下关系、卦变方向做解释；绝对不要杜撰经典原文。
+- 如果当前会话可使用 Web search 工具，且“联网检索目标”要求检索某条爻辞原文，你必须先检索该目标，再结合检索结果解读，并在结尾列出简短来源。
 - 解读时要把“为何这样解”说出来，先交代取用法，再给判断。
 - 解释必须紧扣用户问题，不要变成空泛的易学科普。
 - 有之卦时，要区分“本卦代表当下”和“之卦代表后势/结果”，但不要每次都平均分配篇幅，应按动爻规则决定主次。
@@ -1028,6 +1053,7 @@ function buildPrompt(question, hexagramNum, changedHexNum, lines) {
   prompt += `动爻位置：${changingLines.length ? changingLines.map(pos => `第${pos}爻`).join('、') : '无'}\n`;
   prompt += `初爻是否变：${changingLines.includes(1) ? '是' : '否'}\n`;
   prompt += `本次取用法：${describeInterpretationMethod(lines, hexagramNum)}\n`;
+  prompt += `联网检索目标：${describeYaoSearchTarget(lines, hexagramNum, changedHexNum)}\n`;
 
   if (changedHexNum && changedHexNum !== hexagramNum) {
     const ch = HEXAGRAMS[changedHexNum];
@@ -1042,12 +1068,13 @@ function buildPrompt(question, hexagramNum, changedHexNum, lines) {
 
 /**
  * Converts a subset of Markdown syntax to HTML.
- * Handles bold (**text**), italic (*text*), and paragraph breaks (\n\n).
+ * Handles bold (**text**), italic (*text*), markdown links, and paragraph breaks (\n\n).
  * @param {string} text - Raw text (possibly partial, during streaming)
  * @returns {string} HTML string
  */
 function markdownToHtml(text) {
   let html = text
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/\n\n/g, '</p><p>')
@@ -1058,6 +1085,125 @@ function markdownToHtml(text) {
   if (html && !html.endsWith('</p>')) html = html + '</p>';
 
   return html;
+}
+
+/** Returns true when the configured base URL is the official OpenAI API. */
+function isOfficialOpenAIBaseUrl(baseUrl) {
+  try {
+    const parsed = new URL(baseUrl);
+    return parsed.hostname === 'api.openai.com' && parsed.pathname.startsWith('/v1');
+  } catch (_) {
+    return false;
+  }
+}
+
+/** Maps common official OpenAI models to a search-enabled variant when needed. */
+function getOpenAIWebSearchModel(model) {
+  if (model === 'gpt-4o-mini') return 'gpt-4o-mini-search-preview';
+  if (model === 'gpt-4o') return 'gpt-4o-search-preview';
+  return model;
+}
+
+/** Extracts output text from a Responses API payload. */
+function extractOpenAIResponseText(data) {
+  if (typeof data.output_text === 'string' && data.output_text.trim()) {
+    return data.output_text.trim();
+  }
+
+  let fullText = '';
+  for (const item of data.output ?? []) {
+    if (item.type !== 'message') continue;
+    for (const part of item.content ?? []) {
+      if (part.type === 'output_text' || part.type === 'text') {
+        fullText += part.text ?? '';
+      }
+    }
+  }
+  return fullText.trim();
+}
+
+/** Collects unique web-search sources from a Responses API payload. */
+function extractOpenAIWebSources(data) {
+  const seen = new Set();
+  const sources = [];
+
+  function maybeAddSource(source) {
+    if (!source || typeof source !== 'object') return;
+    const url = typeof source.url === 'string' ? source.url.trim() : '';
+    if (!url || seen.has(url)) return;
+    seen.add(url);
+    sources.push({
+      title: typeof source.title === 'string' && source.title.trim() ? source.title.trim() : url,
+      url,
+    });
+  }
+
+  function visit(node) {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+
+    if (Array.isArray(node.sources)) {
+      node.sources.forEach(maybeAddSource);
+    }
+
+    Object.values(node).forEach(visit);
+  }
+
+  visit(data.output);
+  return sources;
+}
+
+/** Formats sources into a short markdown block that the renderer can hyperlink. */
+function formatInterpretationSources(sources) {
+  if (!sources.length) return '';
+  return '\n\n参考来源：\n' + sources
+    .map((source, index) => `${index + 1}. [${source.title}](${source.url})`)
+    .join('\n');
+}
+
+/** Calls the official OpenAI Responses API with native web search enabled. */
+async function getInterpretationFromOpenAIWebSearch(baseUrl, model, apiKey, userPrompt) {
+  const resolvedModel = getOpenAIWebSearchModel(model);
+  const url = baseUrl.replace(/\/$/, '') + '/responses';
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: resolvedModel,
+      input: [
+        {
+          role: 'system',
+          content: [{ type: 'input_text', text: SYSTEM_PROMPT }],
+        },
+        {
+          role: 'user',
+          content: [{ type: 'input_text', text: userPrompt }],
+        },
+      ],
+      tools: [{ type: 'web_search_preview' }],
+      include: ['web_search_call.action.sources'],
+    }),
+  });
+
+  if (!response.ok) {
+    let errMsg = `HTTP ${response.status}`;
+    try {
+      const errData = await response.json();
+      errMsg = errData.error?.message || errMsg;
+    } catch (_) { /* response body wasn't JSON */ }
+    throw new Error(errMsg);
+  }
+
+  const data = await response.json();
+  const text = extractOpenAIResponseText(data);
+  const sources = extractOpenAIWebSources(data);
+  return text + formatInterpretationSources(sources);
 }
 
 /**
@@ -1084,10 +1230,18 @@ async function getInterpretation() {
   document.getElementById('loadingIndicator').classList.add('active');
 
   const userPrompt = buildPrompt(currentQuestion, currentHexagramNumber, changedHexagramNumber, currentLineValues);
-  const adapter    = PROTOCOL_ADAPTERS[protocol] ?? PROTOCOL_ADAPTERS.openai;
-  const { url, options } = adapter.buildRequest({ baseUrl, model, apiKey }, SYSTEM_PROMPT, userPrompt);
 
   try {
+    if (protocol === 'openai' && isOfficialOpenAIBaseUrl(baseUrl)) {
+      const fullText = await getInterpretationFromOpenAIWebSearch(baseUrl, model, apiKey, userPrompt);
+      document.getElementById('interpretationContent').innerHTML = markdownToHtml(fullText);
+      document.getElementById('loadingIndicator').classList.remove('active');
+      showSection('resetButtonContainer');
+      return;
+    }
+
+    const adapter    = PROTOCOL_ADAPTERS[protocol] ?? PROTOCOL_ADAPTERS.openai;
+    const { url, options } = adapter.buildRequest({ baseUrl, model, apiKey }, SYSTEM_PROMPT, userPrompt);
     const response = await fetch(url, options);
 
     // Surface API-level errors (401 invalid key, 429 rate limit, etc.)
