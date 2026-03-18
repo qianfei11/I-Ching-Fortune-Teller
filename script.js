@@ -186,6 +186,57 @@ function lineTypeDisplayName(type) {
 }
 
 /**
+ * Returns the 1-based positions of changing lines (6 or 9), bottom to top.
+ * @param {number[]} lines - Array of 6 coin sums (index 0 = bottom/first line)
+ * @returns {number[]} Positions of changing lines
+ */
+function getChangingLinePositions(lines) {
+  return lines
+    .map((value, index) => ((value === 6 || value === 9) ? index + 1 : null))
+    .filter((position) => position !== null);
+}
+
+/**
+ * Builds a readable line summary string from bottom to top.
+ * @param {number[]} lines - Array of 6 coin sums (index 0 = bottom/first line)
+ * @returns {string} Human-readable line summary
+ */
+function describeLines(lines) {
+  return lines
+    .map((value, index) => `第${index + 1}爻=${lineTypeDisplayName(lineType(value))}`)
+    .join('；');
+}
+
+/**
+ * Summarizes which interpretation rule applies for the current cast.
+ * @param {number[]} lines - Array of 6 coin sums (index 0 = bottom/first line)
+ * @param {number} hexagramNum - Primary hexagram number
+ * @returns {string} Human-readable rule description
+ */
+function describeInterpretationMethod(lines, hexagramNum) {
+  const changingLines = getChangingLinePositions(lines);
+  const count = changingLines.length;
+  const unchangedLines = [1, 2, 3, 4, 5, 6].filter(pos => !changingLines.includes(pos));
+  const initialLineChanged = changingLines.includes(1);
+
+  if (count === 0) return '六爻皆不变：只看本卦的卦辞。';
+  if (count === 1) return `一爻变：看本卦唯一一根变爻的爻辞，即第${changingLines[0]}爻。`;
+  if (count === 2) return `二爻变：结合本卦两根变爻的爻辞；若有冲突，以上面的第${changingLines[1]}爻为主，下面的第${changingLines[0]}爻为辅。`;
+  if (count === 3) {
+    if (initialLineChanged) {
+      return '三爻变：结合本卦和之卦的卦辞；若两卦卦辞有冲突，因初爻为变爻，以之卦卦辞为主、本卦卦辞为辅。';
+    }
+    return '三爻变：结合本卦和之卦的卦辞；若两卦卦辞有冲突，因初爻不变，以本卦卦辞为主、之卦卦辞为辅。';
+  }
+  if (count === 4) return `四爻变：结合之卦两根不变爻的爻辞；若有冲突，以下面的第${unchangedLines[0]}爻为主，上面的第${unchangedLines[1]}爻为辅。`;
+  if (count === 5) return `五爻变：看之卦唯一一根不变爻的爻辞，即第${unchangedLines[0]}爻。`;
+
+  if (hexagramNum === 1) return '六爻都变：按例外处理，本卦为六根老阳、之卦为坤时，不看坤卦卦辞，改看“用六”。';
+  if (hexagramNum === 2) return '六爻都变：按例外处理，本卦为六根老阴、之卦为乾时，不看乾卦卦辞，改看“用九”。';
+  return '六爻都变：只看之卦的卦辞。';
+}
+
+/**
  * Calculates the lower and upper trigram binary indices from 6 line values.
  * Lower trigram = lines[0..2], upper trigram = lines[3..5].
  * A yang line (7 or 9) contributes 1; yin (6 or 8) contributes 0.
@@ -920,37 +971,63 @@ function resetAll() {
  * System prompt for the I Ching sage persona.
  * Instructs Claude to respond in structured Chinese with classical yet accessible language.
  */
-const SYSTEM_PROMPT = `你是一位精通周易的智慧占卜师，拥有深厚的易学造诣。请用温和、神秘而充满智慧的语气给予指引，语言古朴典雅而不晦涩，结合现代理解。
+const SYSTEM_PROMPT = `你是一位熟悉《周易》占断次序的解卦者。请严格依照下面这套“卦爻辞解读”规则来解释结果，而不是泛泛抒情。语言保持清楚、沉稳、凝练，可有古意，但不要故作玄虚。
 
-请按以下结构回应（每节保持简洁）：
+你必须先判断动爻数量，再决定解读重心：
 
-【卦象含义】
-简介本卦的核心象征与精神（2-3句）
+1. 六爻皆不变：只看本卦的卦辞。
+2. 一爻变：看本卦唯一一根变爻的爻辞。
+3. 二爻变：结合本卦两根变爻的爻辞；如果两根变爻的爻辞有冲突，以在上的为主，以在下的为辅。
+4. 三爻变：结合本卦和之卦的卦辞；如果两个卦象的卦辞有冲突，要看初爻是否为变爻。若初爻没变，以本卦卦辞为主、之卦卦辞为辅；若初爻为变爻，以之卦卦辞为主、本卦卦辞为辅。
+5. 四爻变：结合之卦两根不变爻的爻辞；如果两根不变爻的爻辞有冲突，以在下的为主，以在上的为辅。
+6. 五爻变：看之卦唯一一根不变爻的爻辞。
+7. 六爻都变：只看之卦的卦辞。
+8. 六爻都变的例外：如果本卦是六根老阳、之卦是六根老阴，不看坤卦卦辞，改看“用六”；如果本卦是六根老阴、之卦是六根老阳，不看乾卦卦辞，改看“用九”。
 
-【问题解读】
-结合用户的具体问题，解读卦象对当前处境的指示（3-4句）
+重要约束：
+- 必须严格按上面的规则决定“看什么”为主，不能自行换规则。
+- 只能使用输入中明确给出的卦辞、卦名、动爻信息。
+- 如果规则要求看某条爻辞，但系统没有提供这条爻辞原文，你必须明确说明“本系统未提供该爻原文”，然后基于爻位、上下关系、卦变方向做解释；绝对不要杜撰经典原文。
+- 解读时要把“为何这样解”说出来，先交代取用法，再给判断。
+- 解释必须紧扣用户问题，不要变成空泛的易学科普。
+- 有之卦时，要区分“本卦代表当下”和“之卦代表后势/结果”，但不要每次都平均分配篇幅，应按动爻规则决定主次。
 
-【变卦指引】（仅在有变爻时出现）
-解读变卦的含义与潜在转机（2-3句）
+请按以下结构输出：
+
+【取用法】
+先说明动爻数量，以及本次为何以本卦、变爻或之卦为主。
+
+【卦爻辞解读】
+依上述规则展开，不空谈；若缺少爻辞原文，要明确说明并改用爻位义与卦变关系解释。
+
+【问题判断】
+把卦理落到用户问题上，给出对现状、阻力、转机、后势的判断。
 
 【行动建议】
-给出3-4条具体、实际、可操作的指引
+给出3条以内、可执行、不过度绝对化的建议。
 
-总字数约400-500字。`;
+总字数约450-650字。`;
 
 /**
  * Builds the user message prompt for the Claude API call.
  * @param {string} question         - User's question
  * @param {number} hexagramNum      - Primary hexagram number
  * @param {number} changedHexNum    - Changed hexagram number (0 if none)
+ * @param {number[]} lines          - 6 coin-sum values (index 0 = bottom line)
  * @returns {string} Formatted prompt string
  */
-function buildPrompt(question, hexagramNum, changedHexNum) {
+function buildPrompt(question, hexagramNum, changedHexNum, lines) {
   const h = HEXAGRAMS[hexagramNum];
+  const changingLines = getChangingLinePositions(lines);
   let prompt = `用户问题：${question}\n\n`;
   prompt += `本卦：第 ${hexagramNum} 卦《${h.name}》（${h.eng}）\n`;
   prompt += `卦意：${h.meaning}\n`;
   prompt += `卦辞：${h.desc}\n`;
+  prompt += `六爻（自下而上）：${describeLines(lines)}\n`;
+  prompt += `动爻数量：${changingLines.length}\n`;
+  prompt += `动爻位置：${changingLines.length ? changingLines.map(pos => `第${pos}爻`).join('、') : '无'}\n`;
+  prompt += `初爻是否变：${changingLines.includes(1) ? '是' : '否'}\n`;
+  prompt += `本次取用法：${describeInterpretationMethod(lines, hexagramNum)}\n`;
 
   if (changedHexNum && changedHexNum !== hexagramNum) {
     const ch = HEXAGRAMS[changedHexNum];
@@ -959,7 +1036,7 @@ function buildPrompt(question, hexagramNum, changedHexNum) {
     prompt += `卦辞：${ch.desc}\n`;
   }
 
-  prompt += `\n请根据以上卦象，给出深刻的占卜解读与实际指引。`;
+  prompt += `\n请严格按动爻数量选择解读规则，先说明取用法，再进行卦爻辞解读、问题判断与行动建议。`;
   return prompt;
 }
 
@@ -1006,7 +1083,7 @@ async function getInterpretation() {
   document.getElementById('interpretationContent').innerHTML = '';
   document.getElementById('loadingIndicator').classList.add('active');
 
-  const userPrompt = buildPrompt(currentQuestion, currentHexagramNumber, changedHexagramNumber);
+  const userPrompt = buildPrompt(currentQuestion, currentHexagramNumber, changedHexagramNumber, currentLineValues);
   const adapter    = PROTOCOL_ADAPTERS[protocol] ?? PROTOCOL_ADAPTERS.openai;
   const { url, options } = adapter.buildRequest({ baseUrl, model, apiKey }, SYSTEM_PROMPT, userPrompt);
 
