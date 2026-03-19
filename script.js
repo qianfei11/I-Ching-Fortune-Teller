@@ -125,6 +125,9 @@ let currentHexagramNumber = 0;  // Primary hexagram number (1–64)
 let changedHexagramNumber = 0;  // Changed hexagram number, 0 if no changing lines
 let currentRound         = 0;   // How many coin rounds completed (0–6)
 let isAutoTossing        = false; // Guard to prevent double-toss during auto mode
+const HEXAGRAM_TEXTS_PATH = 'hexagram-texts.json';
+let hexagramTextCorpus = null;
+let hexagramTextCorpusPromise = null;
 
 // ============ Core I Ching Logic ============
 
@@ -208,56 +211,171 @@ function describeLines(lines) {
 }
 
 /**
- * Summarizes which interpretation rule applies for the current cast.
- * @param {number[]} lines - Array of 6 coin sums (index 0 = bottom/first line)
- * @param {number} hexagramNum - Primary hexagram number
- * @returns {string} Human-readable rule description
+ * Loads the local 卦爻辞 corpus once and caches it for later prompt building.
+ * @returns {Promise<object>}
  */
-function describeInterpretationMethod(lines, hexagramNum) {
-  const changingLines = getChangingLinePositions(lines);
-  const count = changingLines.length;
-  const unchangedLines = [1, 2, 3, 4, 5, 6].filter(pos => !changingLines.includes(pos));
-  const initialLineChanged = changingLines.includes(1);
-
-  if (count === 0) return '六爻皆不变：只看本卦的卦辞。';
-  if (count === 1) return `一爻变：看本卦唯一一根变爻的爻辞，即第${changingLines[0]}爻。`;
-  if (count === 2) return `二爻变：结合本卦两根变爻的爻辞；若有冲突，以上面的第${changingLines[1]}爻为主，下面的第${changingLines[0]}爻为辅。`;
-  if (count === 3) {
-    if (initialLineChanged) {
-      return '三爻变：结合本卦和之卦的卦辞；若两卦卦辞有冲突，因初爻为变爻，以之卦卦辞为主、本卦卦辞为辅。';
-    }
-    return '三爻变：结合本卦和之卦的卦辞；若两卦卦辞有冲突，因初爻不变，以本卦卦辞为主、之卦卦辞为辅。';
+async function loadHexagramTextCorpus() {
+  if (hexagramTextCorpus) return hexagramTextCorpus;
+  if (!hexagramTextCorpusPromise) {
+    hexagramTextCorpusPromise = fetch(HEXAGRAM_TEXTS_PATH).then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`未能加载卦爻辞原文库（HTTP ${response.status}）`);
+      }
+      const data = await response.json();
+      if (!data?.hexagrams) {
+        throw new Error('卦爻辞原文库格式无效');
+      }
+      hexagramTextCorpus = data;
+      return data;
+    }).catch((err) => {
+      hexagramTextCorpusPromise = null;
+      throw err;
+    });
   }
-  if (count === 4) return `四爻变：结合之卦两根不变爻的爻辞；若有冲突，以下面的第${unchangedLines[0]}爻为主，上面的第${unchangedLines[1]}爻为辅。`;
-  if (count === 5) return `五爻变：看之卦唯一一根不变爻的爻辞，即第${unchangedLines[0]}爻。`;
-
-  if (hexagramNum === 1) return '六爻都变：按例外处理，本卦为六根老阳、之卦为坤时，不看坤卦卦辞，改看“用六”。';
-  if (hexagramNum === 2) return '六爻都变：按例外处理，本卦为六根老阴、之卦为乾时，不看乾卦卦辞，改看“用九”。';
-  return '六爻都变：只看之卦的卦辞。';
+  return hexagramTextCorpusPromise;
 }
 
 /**
- * Describes which exact text the model should look up when web search is available.
- * @param {number[]} lines - Array of 6 coin sums (index 0 = bottom/first line)
- * @param {number} hexagramNum - Primary hexagram number
- * @param {number|null} changedHexNum - Changed hexagram number, if any
- * @returns {string} Search instruction string
+ * Gets one hexagram's source-text entry from the local corpus.
+ * @param {object} corpus
+ * @param {number} hexagramNum
+ * @returns {object}
  */
-function describeYaoSearchTarget(lines, hexagramNum, changedHexNum) {
+function getHexagramTextEntry(corpus, hexagramNum) {
+  const entry = corpus?.hexagrams?.[String(hexagramNum)];
+  if (!entry) throw new Error(`缺少第${hexagramNum}卦原文数据`);
+  return entry;
+}
+
+/**
+ * Gets a specific line text from one hexagram entry.
+ * @param {object} entry
+ * @param {number} position - 1-based line position
+ * @returns {{label: string, text: string}}
+ */
+function getHexagramLineText(entry, position) {
+  const line = entry?.lines?.[String(position)];
+  if (!line) throw new Error(`缺少第${entry?.number ?? '?'}卦第${position}爻原文`);
+  return line;
+}
+
+/**
+ * Builds a prompt-ready label for one source passage.
+ * @param {number} hexagramNum
+ * @param {string} label
+ * @returns {string}
+ */
+function formatSourcePassageLabel(hexagramNum, label) {
+  const hexagramName = HEXAGRAMS[hexagramNum]?.name ?? '';
+  return `第${hexagramNum}卦《${hexagramName}》${label}`;
+}
+
+/**
+ * Selects the exact 卦辞 / 爻辞 materials needed for this cast.
+ * Passages are returned in the priority order the model should weigh them.
+ * @param {object} corpus
+ * @param {number[]} lines
+ * @param {number} hexagramNum
+ * @param {number} changedHexNum
+ * @returns {{label: string, text: string}[]}
+ */
+function getInterpretationSourcePassages(corpus, lines, hexagramNum, changedHexNum) {
   const changingLines = getChangingLinePositions(lines);
   const count = changingLines.length;
   const unchangedLines = [1, 2, 3, 4, 5, 6].filter(pos => !changingLines.includes(pos));
-  const changedLabel = changedHexNum && changedHexNum !== hexagramNum ? `第${changedHexNum}卦` : '之卦';
+  const primaryEntry = getHexagramTextEntry(corpus, hexagramNum);
+  const changedEntry = changedHexNum ? getHexagramTextEntry(corpus, changedHexNum) : null;
+  const passages = [];
 
-  if (count === 0) return '本次规则只看本卦卦辞，无需联网检索爻辞原文。';
-  if (count === 1) return `若可联网，请检索“第${hexagramNum}卦 第${changingLines[0]}爻 爻辞原文”。`;
-  if (count === 2) return `若可联网，请分别检索“第${hexagramNum}卦 第${changingLines[0]}爻 爻辞原文”和“第${hexagramNum}卦 第${changingLines[1]}爻 爻辞原文”。`;
-  if (count === 3) return '本次规则主要看本卦与之卦的卦辞，无需联网检索爻辞原文。';
-  if (count === 4) return `若可联网，请分别检索“${changedLabel} 第${unchangedLines[0]}爻 爻辞原文”和“${changedLabel} 第${unchangedLines[1]}爻 爻辞原文”。`;
-  if (count === 5) return `若可联网，请检索“${changedLabel} 第${unchangedLines[0]}爻 爻辞原文”。`;
-  if (hexagramNum === 1) return '若可联网，请检索“坤卦 用六 爻辞 原文”。';
-  if (hexagramNum === 2) return '若可联网，请检索“乾卦 用九 爻辞 原文”。';
-  return '本次规则只看之卦卦辞，无需联网检索爻辞原文。';
+  const addGuaCi = (targetHexagramNum, entry) => {
+    passages.push({
+      label: formatSourcePassageLabel(targetHexagramNum, '卦辞'),
+      text: entry.gua_ci,
+    });
+  };
+
+  const addLine = (targetHexagramNum, entry, position) => {
+    const line = getHexagramLineText(entry, position);
+    passages.push({
+      label: formatSourcePassageLabel(targetHexagramNum, line.label),
+      text: line.text,
+    });
+  };
+
+  const addSpecial = (targetHexagramNum, entry) => {
+    if (!entry?.special) throw new Error(`缺少第${targetHexagramNum}卦${targetHexagramNum === 1 ? '用九' : '用六'}原文`);
+    passages.push({
+      label: formatSourcePassageLabel(targetHexagramNum, entry.special.label),
+      text: entry.special.text,
+    });
+  };
+
+  if (count === 0) {
+    addGuaCi(hexagramNum, primaryEntry);
+    return passages;
+  }
+
+  if (count === 1) {
+    addLine(hexagramNum, primaryEntry, changingLines[0]);
+    return passages;
+  }
+
+  if (count === 2) {
+    addLine(hexagramNum, primaryEntry, changingLines[1]);
+    addLine(hexagramNum, primaryEntry, changingLines[0]);
+    return passages;
+  }
+
+  if (count === 3) {
+    if (!changedEntry) throw new Error('三爻变缺少之卦原文数据');
+    if (changingLines.includes(1)) {
+      addGuaCi(changedHexNum, changedEntry);
+      addGuaCi(hexagramNum, primaryEntry);
+    } else {
+      addGuaCi(hexagramNum, primaryEntry);
+      addGuaCi(changedHexNum, changedEntry);
+    }
+    return passages;
+  }
+
+  if (count === 4) {
+    if (!changedEntry) throw new Error('四爻变缺少之卦原文数据');
+    addLine(changedHexNum, changedEntry, unchangedLines[0]);
+    addLine(changedHexNum, changedEntry, unchangedLines[1]);
+    return passages;
+  }
+
+  if (count === 5) {
+    if (!changedEntry) throw new Error('五爻变缺少之卦原文数据');
+    addLine(changedHexNum, changedEntry, unchangedLines[0]);
+    return passages;
+  }
+
+  if (!changedEntry) throw new Error('六爻变缺少之卦原文数据');
+
+  if (hexagramNum === 1 && changedHexNum === 2) {
+    addSpecial(changedHexNum, changedEntry);
+    return passages;
+  }
+
+  if (hexagramNum === 2 && changedHexNum === 1) {
+    addSpecial(changedHexNum, changedEntry);
+    return passages;
+  }
+
+  addGuaCi(changedHexNum, changedEntry);
+  return passages;
+}
+
+/**
+ * Formats selected source passages for the user prompt.
+ * @param {{label: string, text: string}[]} passages
+ * @returns {string}
+ */
+function formatInterpretationSourcePassages(passages) {
+  return passages
+    .map((passage, index) => `${index + 1}. ${passage.label}：${passage.text}`)
+    .join('\n');
 }
 
 /**
@@ -486,7 +604,7 @@ const PROTOCOL_ADAPTERS = {
  */
 const PRESETS = {
   // ── OpenAI-compatible ──────────────────────────────────
-  openai:        { protocol: 'openai',    url: 'https://api.openai.com/v1',                          model: 'gpt-4o-mini-search-preview' },
+  openai:        { protocol: 'openai',    url: 'https://api.openai.com/v1',                          model: 'gpt-4o-mini'             },
   deepseek:      { protocol: 'openai',    url: 'https://api.deepseek.com/v1',                        model: 'deepseek-chat'         },
   qwen:          { protocol: 'openai',    url: 'https://dashscope.aliyuncs.com/compatible-mode/v1',  model: 'qwen-turbo'            },
   ollama:        { protocol: 'openai',    url: 'http://localhost:11434/v1',                          model: 'llama3'                },
@@ -537,7 +655,7 @@ function applyProtocolUI(protocol) {
 
   document.getElementById('protocolNote').textContent = isAnthropic
     ? 'Anthropic 官方 API，无需填写 Base URL（端点固定）。需要 Anthropic Console 颁发的 API Key。'
-    : '支持 OpenAI、DeepSeek、通义千问、Ollama 等任意兼容接口；若使用 OpenAI 官方 API，将自动启用 Responses API + Web search 检索爻辞原文，其它兼容接口仍使用普通 /chat/completions。';
+    : '支持 OpenAI、DeepSeek、通义千问、Ollama 等任意兼容接口；解读时统一使用内置的《周易》卦爻辞原文库，不再依赖联网检索。';
 
   document.getElementById('apiKeyInput').placeholder = isAnthropic
     ? 'sk-ant-...'
@@ -989,15 +1107,14 @@ function resetAll() {
   document.getElementById('questionCard').scrollIntoView({ behavior: 'smooth' });
 }
 
-// ============ Claude API Integration ============
+// ============ LLM Interpretation ============
 
 /**
- * System prompt for the I Ching sage persona.
- * Instructs Claude to respond in structured Chinese with classical yet accessible language.
+ * System prompt for the I Ching interpretation request.
  */
-const SYSTEM_PROMPT = `你是一位熟悉《周易》占断次序的解卦者。请严格依照下面这套“卦爻辞解读”规则来解释结果，而不是泛泛抒情。语言保持清楚、沉稳、凝练，可有古意，但不要故作玄虚。
+const SYSTEM_PROMPT = `你是一位熟悉《周易》卦爻辞与占断次序的解卦者。你会先在内部按动爻数量判断取材主次，再直接给出面向提问者的解读。语言保持清楚、沉稳、凝练，可有古意，但不要故作玄虚。
 
-你必须先判断动爻数量，再决定解读重心：
+内部取材次序如下：
 
 1. 六爻皆不变：只看本卦的卦辞。
 2. 一爻变：看本卦唯一一根变爻的爻辞。
@@ -1009,60 +1126,53 @@ const SYSTEM_PROMPT = `你是一位熟悉《周易》占断次序的解卦者。
 8. 六爻都变的例外：如果本卦是六根老阳、之卦是六根老阴，不看坤卦卦辞，改看“用六”；如果本卦是六根老阴、之卦是六根老阳，不看乾卦卦辞，改看“用九”。
 
 重要约束：
-- 必须严格按上面的规则决定“看什么”为主，不能自行换规则。
-- 只能使用输入中明确给出的卦辞、卦名、动爻信息。
-- 如果规则要求看某条爻辞，但系统没有提供这条爻辞原文，你必须明确说明“本系统未提供该爻原文”，然后基于爻位、上下关系、卦变方向做解释；绝对不要杜撰经典原文。
-- 如果当前会话可使用 Web search 工具，且“联网检索目标”要求检索某条爻辞原文，你必须先检索该目标，再结合检索结果解读，并在结尾列出简短来源。
-- 解读时要把“为何这样解”说出来，先交代取用法，再给判断。
+- 只使用输入中提供的卦辞、爻辞、卦名、动爻信息；绝对不要补写未给出的经典原文。
+- 把占断规则执行在内部，不要在输出中解释自己采用了哪条规则，也不要出现“依你给定的规则”“根据系统”“本系统”“联网”“检索”“提示词”“材料”“作为AI”等元话语。
+- 直接进入判断，不要写取用步骤、数据说明、来源说明或方法说明。
 - 解释必须紧扣用户问题，不要变成空泛的易学科普。
 - 有之卦时，要区分“本卦代表当下”和“之卦代表后势/结果”，但不要每次都平均分配篇幅，应按动爻规则决定主次。
+- 如需引用原文，只摘取短句并自然融入分析，不要大段照抄。
 
 请按以下结构输出：
 
-【取用法】
-先说明动爻数量，以及本次为何以本卦、变爻或之卦为主。
+【卦象】
+先点出这卦对问题的总体判断与气象。
 
-【卦爻辞解读】
-依上述规则展开，不空谈；若缺少爻辞原文，要明确说明并改用爻位义与卦变关系解释。
+【分析】
+结合给定原文与卦变关系，落到现状、阻力、转机、后势。
 
-【问题判断】
-把卦理落到用户问题上，给出对现状、阻力、转机、后势的判断。
-
-【行动建议】
+【建议】
 给出3条以内、可执行、不过度绝对化的建议。
 
-总字数约450-650字。`;
+总字数约400-650字。`;
 
 /**
- * Builds the user message prompt for the Claude API call.
+ * Builds the user message prompt for the interpretation request.
  * @param {string} question         - User's question
  * @param {number} hexagramNum      - Primary hexagram number
  * @param {number} changedHexNum    - Changed hexagram number (0 if none)
  * @param {number[]} lines          - 6 coin-sum values (index 0 = bottom line)
+ * @param {object} textCorpus       - Local 卦爻辞 corpus
  * @returns {string} Formatted prompt string
  */
-function buildPrompt(question, hexagramNum, changedHexNum, lines) {
+function buildPrompt(question, hexagramNum, changedHexNum, lines, textCorpus) {
   const h = HEXAGRAMS[hexagramNum];
   const changingLines = getChangingLinePositions(lines);
-  let prompt = `用户问题：${question}\n\n`;
-  prompt += `本卦：第 ${hexagramNum} 卦《${h.name}》（${h.eng}）\n`;
-  prompt += `卦意：${h.meaning}\n`;
-  prompt += `卦辞：${h.desc}\n`;
+  const sourcePassages = getInterpretationSourcePassages(textCorpus, lines, hexagramNum, changedHexNum);
+  let prompt = `问题：${question}\n\n`;
+  prompt += `本卦：第${hexagramNum}卦《${h.name}》\n`;
   prompt += `六爻（自下而上）：${describeLines(lines)}\n`;
   prompt += `动爻数量：${changingLines.length}\n`;
-  prompt += `动爻位置：${changingLines.length ? changingLines.map(pos => `第${pos}爻`).join('、') : '无'}\n`;
+  prompt += `动爻：${changingLines.length ? changingLines.map(pos => `第${pos}爻`).join('、') : '无'}\n`;
   prompt += `初爻是否变：${changingLines.includes(1) ? '是' : '否'}\n`;
-  prompt += `本次取用法：${describeInterpretationMethod(lines, hexagramNum)}\n`;
-  prompt += `联网检索目标：${describeYaoSearchTarget(lines, hexagramNum, changedHexNum)}\n`;
 
   if (changedHexNum && changedHexNum !== hexagramNum) {
     const ch = HEXAGRAMS[changedHexNum];
-    prompt += `\n之卦：第 ${changedHexNum} 卦《${ch.name}》（${ch.eng}）\n`;
-    prompt += `卦意：${ch.meaning}\n`;
-    prompt += `卦辞：${ch.desc}\n`;
+    prompt += `之卦：第${changedHexNum}卦《${ch.name}》\n`;
   }
 
-  prompt += `\n请严格按动爻数量选择解读规则，先说明取用法，再进行卦爻辞解读、问题判断与行动建议。`;
+  prompt += `\n相关原文：\n${formatInterpretationSourcePassages(sourcePassages)}\n`;
+  prompt += '\n直接给出针对这个问题的卦象判断、具体分析与行动建议，不要提及占断规则、取材步骤、来源、系统设定、联网检索或提示词。';
   return prompt;
 }
 
@@ -1087,130 +1197,10 @@ function markdownToHtml(text) {
   return html;
 }
 
-/** Returns true when the configured base URL is the official OpenAI API. */
-function isOfficialOpenAIBaseUrl(baseUrl) {
-  try {
-    const parsed = new URL(baseUrl);
-    return parsed.hostname === 'api.openai.com' && parsed.pathname.startsWith('/v1');
-  } catch (_) {
-    return false;
-  }
-}
-
-/** Maps common official OpenAI models to a search-enabled variant when needed. */
-function getOpenAIWebSearchModel(model) {
-  if (model === 'gpt-4o-mini') return 'gpt-4o-mini-search-preview';
-  if (model === 'gpt-4o') return 'gpt-4o-search-preview';
-  return model;
-}
-
-/** Extracts output text from a Responses API payload. */
-function extractOpenAIResponseText(data) {
-  if (typeof data.output_text === 'string' && data.output_text.trim()) {
-    return data.output_text.trim();
-  }
-
-  let fullText = '';
-  for (const item of data.output ?? []) {
-    if (item.type !== 'message') continue;
-    for (const part of item.content ?? []) {
-      if (part.type === 'output_text' || part.type === 'text') {
-        fullText += part.text ?? '';
-      }
-    }
-  }
-  return fullText.trim();
-}
-
-/** Collects unique web-search sources from a Responses API payload. */
-function extractOpenAIWebSources(data) {
-  const seen = new Set();
-  const sources = [];
-
-  function maybeAddSource(source) {
-    if (!source || typeof source !== 'object') return;
-    const url = typeof source.url === 'string' ? source.url.trim() : '';
-    if (!url || seen.has(url)) return;
-    seen.add(url);
-    sources.push({
-      title: typeof source.title === 'string' && source.title.trim() ? source.title.trim() : url,
-      url,
-    });
-  }
-
-  function visit(node) {
-    if (!node || typeof node !== 'object') return;
-    if (Array.isArray(node)) {
-      node.forEach(visit);
-      return;
-    }
-
-    if (Array.isArray(node.sources)) {
-      node.sources.forEach(maybeAddSource);
-    }
-
-    Object.values(node).forEach(visit);
-  }
-
-  visit(data.output);
-  return sources;
-}
-
-/** Formats sources into a short markdown block that the renderer can hyperlink. */
-function formatInterpretationSources(sources) {
-  if (!sources.length) return '';
-  return '\n\n参考来源：\n' + sources
-    .map((source, index) => `${index + 1}. [${source.title}](${source.url})`)
-    .join('\n');
-}
-
-/** Calls the official OpenAI Responses API with native web search enabled. */
-async function getInterpretationFromOpenAIWebSearch(baseUrl, model, apiKey, userPrompt) {
-  const resolvedModel = getOpenAIWebSearchModel(model);
-  const url = baseUrl.replace(/\/$/, '') + '/responses';
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: resolvedModel,
-      input: [
-        {
-          role: 'system',
-          content: [{ type: 'input_text', text: SYSTEM_PROMPT }],
-        },
-        {
-          role: 'user',
-          content: [{ type: 'input_text', text: userPrompt }],
-        },
-      ],
-      tools: [{ type: 'web_search_preview' }],
-      include: ['web_search_call.action.sources'],
-    }),
-  });
-
-  if (!response.ok) {
-    let errMsg = `HTTP ${response.status}`;
-    try {
-      const errData = await response.json();
-      errMsg = errData.error?.message || errMsg;
-    } catch (_) { /* response body wasn't JSON */ }
-    throw new Error(errMsg);
-  }
-
-  const data = await response.json();
-  const text = extractOpenAIResponseText(data);
-  const sources = extractOpenAIWebSources(data);
-  return text + formatInterpretationSources(sources);
-}
-
 /**
  * Fetches the AI interpretation via the configured protocol adapter.
  * Reads protocol, Base URL, model, and API key from localStorage, then
- * dispatches through PROTOCOL_ADAPTERS so both OpenAI-compatible and
- * Anthropic APIs are handled without any protocol-specific logic here.
+ * dispatches through PROTOCOL_ADAPTERS.
  * Streams the response text directly into the interpretation card.
  */
 async function getInterpretation() {
@@ -1229,17 +1219,15 @@ async function getInterpretation() {
   document.getElementById('interpretationContent').innerHTML = '';
   document.getElementById('loadingIndicator').classList.add('active');
 
-  const userPrompt = buildPrompt(currentQuestion, currentHexagramNumber, changedHexagramNumber, currentLineValues);
-
   try {
-    if (protocol === 'openai' && isOfficialOpenAIBaseUrl(baseUrl)) {
-      const fullText = await getInterpretationFromOpenAIWebSearch(baseUrl, model, apiKey, userPrompt);
-      document.getElementById('interpretationContent').innerHTML = markdownToHtml(fullText);
-      document.getElementById('loadingIndicator').classList.remove('active');
-      showSection('resetButtonContainer');
-      return;
-    }
-
+    const textCorpus = await loadHexagramTextCorpus();
+    const userPrompt = buildPrompt(
+      currentQuestion,
+      currentHexagramNumber,
+      changedHexagramNumber,
+      currentLineValues,
+      textCorpus,
+    );
     const adapter    = PROTOCOL_ADAPTERS[protocol] ?? PROTOCOL_ADAPTERS.openai;
     const { url, options } = adapter.buildRequest({ baseUrl, model, apiKey }, SYSTEM_PROMPT, userPrompt);
     const response = await fetch(url, options);
@@ -1317,5 +1305,8 @@ function showInterpretationError(message) {
 
 document.addEventListener('DOMContentLoaded', () => {
   loadApiKeyIfExists();
+  loadHexagramTextCorpus().catch((err) => {
+    console.warn('[I Ching] Failed to preload hexagram texts:', err);
+  });
   document.getElementById('questionInput').addEventListener('input', updateCharCount);
 });
